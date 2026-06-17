@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { firstValueFrom, timeout, take } from 'rxjs';
 
 import { AccountService } from '@bitwarden/common/auth/abstractions/account.service';
@@ -106,6 +106,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     private api: SmAdminService,
     private accountService: AccountService,
     private tokenService: TokenService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -135,6 +136,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.error = e?.message || 'Failed to load Secrets Manager state.';
     } finally {
       this.loading = false;
+      this.changeDetectorRef.markForCheck();
       console.log('[sm-admin] ngOnInit done, loading=false');
     }
   }
@@ -174,6 +176,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     if (this.selectedOrg) {
       this.loadSecrets();
     }
+    this.changeDetectorRef.markForCheck();
   }
 
   private async loadSecrets(): Promise<void> {
@@ -184,12 +187,14 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     } catch {
       this.secrets = [];
     }
+    this.changeDetectorRef.markForCheck();
   }
 
   selectOrg(orgId: string): void {
     this.stateService.selectOrg(orgId);
     this.refreshFromState();
     this.activeSection = 'overview';
+    this.changeDetectorRef.markForCheck();
   }
 
   switchSection(section: Section): void {
@@ -197,10 +202,12 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     if (section === 'secrets' && this.selectedOrg) {
       this.loadSecrets();
     }
+    this.changeDetectorRef.markForCheck();
   }
 
   async refresh(): Promise<void> {
     this.loading = true;
+    this.changeDetectorRef.markForCheck();
     try {
       const state = await this.api.fetchState();
       this.stateService.setState(state);
@@ -209,6 +216,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.error = e?.message || 'Refresh failed.';
     }
     this.loading = false;
+    this.changeDetectorRef.markForCheck();
   }
 
   async provision(e: Event): Promise<void> {
@@ -216,9 +224,11 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.provError = null;
     if (!this.provForm.orgName.trim() || !this.provForm.project.trim()) {
       this.provError = 'Organization name and project name are required.';
+      this.changeDetectorRef.markForCheck();
       return;
     }
     this.provSubmitting = true;
+    this.changeDetectorRef.markForCheck();
     try {
       this.provResult = await this.api.provision(this.provForm);
       this.provForm = { orgName: '', project: '', readOnly: false };
@@ -227,6 +237,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.provError = err?.message || 'Provision failed.';
     } finally {
       this.provSubmitting = false;
+      this.changeDetectorRef.markForCheck();
     }
   }
 
