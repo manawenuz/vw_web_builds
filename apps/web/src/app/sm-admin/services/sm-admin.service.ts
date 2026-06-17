@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Injectable } from '@angular/core';
 import {
   AdminState,
@@ -26,11 +27,13 @@ export class SmAdminService {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    console.log(`[sm-admin:api] ${method} ${path}`, { tokenPresent: !!this.token });
     const response = await fetch(path, {
       method,
       headers: this.headers(body !== undefined),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+    console.log(`[sm-admin:api] ${method} ${path} response`, response.status);
     if (!response.ok) {
       const text = await response.text().catch(() => 'Unknown error');
       throw new Error(`${response.status} ${response.statusText}: ${text}`);

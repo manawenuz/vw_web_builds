@@ -1,9 +1,10 @@
+/* eslint-disable no-console */
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout, take } from 'rxjs';
 
 import { AccountService } from '@bitwarden/common/auth/abstractions/account.service';
 import { TokenService } from '@bitwarden/common/auth/abstractions/token.service';
-import { getUserId } from '@bitwarden/common/auth/services/account.service';
+import { getOptionalUserId } from '@bitwarden/common/auth/services/account.service';
 
 import { SmStateService } from './services/sm-state.service';
 import { SmAdminService } from './services/sm-admin.service';
@@ -104,23 +105,33 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   ) {}
 
   async ngOnInit(): Promise<void> {
+    console.log('[sm-admin] ngOnInit start');
     await this.ensureVaultJwt();
 
     const jwt = (window as any).__BWS_VAULT_JWT__;
+    console.log('[sm-admin] jwt present after ensureVaultJwt:', !!jwt);
     if (!jwt) {
       this.error = 'Not authenticated. Please log into the vault first.';
       this.loading = false;
+      console.log('[sm-admin] set not-authenticated error');
       return;
     }
 
     try {
-      const state = await this.api.fetchState();
+      console.log('[sm-admin] calling fetchState');
+      const state = await Promise.race([
+        this.api.fetchState(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('fetchState timeout')), 10000)),
+      ]);
+      console.log('[sm-admin] fetchState returned', state);
       this.stateService.setState(state);
       this.refreshFromState();
     } catch (e: any) {
+      console.error('[sm-admin] fetchState failed:', e);
       this.error = e?.message || 'Failed to load Secrets Manager state.';
     } finally {
       this.loading = false;
+      console.log('[sm-admin] ngOnInit done, loading=false');
     }
   }
 
@@ -130,19 +141,26 @@ export class SmAdminComponent implements OnInit, OnDestroy {
 
   private async ensureVaultJwt(): Promise<void> {
     if ((window as any).__BWS_VAULT_JWT__) {
+      console.log('[sm-admin] using pre-existing window.__BWS_VAULT_JWT__');
       return;
     }
+    console.log('[sm-admin] no window.__BWS_VAULT_JWT__, fetching from TokenService');
     try {
-      const userId = await firstValueFrom(this.accountService.activeAccount$.pipe(getUserId));
+      const userId = await firstValueFrom(
+        this.accountService.activeAccount$.pipe(take(1), timeout({ each: 5000 }), getOptionalUserId),
+      );
+      console.log('[sm-admin] activeAccount$ userId:', userId);
       if (!userId) {
+        console.warn('[sm-admin] no active account');
         return;
       }
       const jwt = await this.tokenService.getAccessToken(userId);
+      console.log('[sm-admin] TokenService returned jwt:', jwt ? 'present' : 'null');
       if (jwt) {
         (window as any).__BWS_VAULT_JWT__ = jwt;
       }
     } catch (err) {
-      // Leave window.__BWS_VAULT_JWT__ unset; the UI will show the not-authenticated state.
+      console.error('[sm-admin] ensureVaultJwt failed:', err);
     }
   }
 
