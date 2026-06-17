@@ -1,0 +1,16 @@
+:host {
+  display: block;
+  height: 100%;
+  overflow: auto;
+}
+
+.sm-admin-container {
+  height: 100%;
+  min-height: 0;
+}
+
+.sm-admin-loading {
+  padding: 2rem;
+  color: var(--color-text-muted, #7a92b0);
+  text-align: center;
+}

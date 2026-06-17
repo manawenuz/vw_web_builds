@@ -231,7 +231,7 @@ export class ProductSwitcherService {
           sm: {
             name: "Secrets Manager",
             icon: "bwi-cli",
-            appRoute: ["/sm", smOrg?.id],
+            appRoute: smOrg?.id ? ["/sm", smOrg.id] : ["/sm"],
             marketingRoute: {
               route: "/sm-landing",
               external: false,
@@ -276,6 +276,10 @@ export class ProductSwitcherService {
         } else if (!shouldDisableSMAds) {
           // Only show SM in "other" section if ads are not disabled
           other.push(products.sm);
+        } else {
+          // Vaultwarden: the SM admin panel is always available — show SM in bento
+          // even when no org has canAccessSecretsManager set, so users can reach it.
+          bento.push(products.sm);
         }
 
         if (acOrg) {

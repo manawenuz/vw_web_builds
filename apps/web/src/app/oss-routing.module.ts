@@ -662,6 +662,11 @@ const routes: Routes = [
         ],
       },
       {
+        path: "sm",
+        loadChildren: () =>
+          import("./sm-admin/sm-admin.module").then((m) => m.SmAdminModule),
+      },
+      {
         path: "sm-landing",
         component: SMLandingComponent,
         data: { titleId: "moreProductsFromBitwarden" },
