@@ -10,7 +10,7 @@ import { TokenService } from '@bitwarden/common/auth/abstractions/token.service'
 @Component({
   selector: 'app-sm-admin',
   templateUrl: './sm-admin.component.html',
-  styleUrls: ['./sm-admin.component.scss'],
+  standalone: false,
 })
 export class SmAdminComponent implements OnInit, OnDestroy {
   private injectedStyles: HTMLStyleElement[] = [];
