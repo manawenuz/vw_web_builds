@@ -57,22 +57,30 @@
             Overview
           </button>
           <button class="sm-nav-item" [class.active]="activeSection === 'projects'"
+                  [disabled]="!selectedOrg"
                   (click)="switchSection('projects')">
             Projects
             <span class="sm-badge">{{ selectedOrg?.projects?.length || 0 }}</span>
           </button>
           <button class="sm-nav-item" [class.active]="activeSection === 'secrets'"
+                  [disabled]="!selectedOrg"
                   (click)="switchSection('secrets')">
             Secrets
             <span class="sm-badge">{{ selectedOrg?.secretCount || 0 }}</span>
           </button>
           <button class="sm-nav-item" [class.active]="activeSection === 'machine-accounts'"
+                  [disabled]="!selectedOrg"
                   (click)="switchSection('machine-accounts')">
             Machine Accounts
             <span class="sm-badge">{{ selectedOrg?.machineAccounts?.length || 0 }}</span>
           </button>
           <div class="sm-nav-separator"></div>
+          <button class="sm-nav-item" [class.active]="activeSection === 'provision'"
+                  (click)="switchSection('provision')">
+            + Provision
+          </button>
           <button class="sm-nav-item" [class.active]="activeSection === 'settings'"
+                  [disabled]="!selectedOrg"
                   (click)="switchSection('settings')">
             Settings
           </button>
@@ -82,6 +90,16 @@
       <!-- Main content -->
       <main class="sm-main">
         <!-- Overview -->
+        <section *ngIf="activeSection === 'overview' && !selectedOrg" class="sm-section sm-empty-state">
+          <h2>Welcome to Secrets Manager</h2>
+          <p class="sm-info">
+            No organizations yet. Click <strong>+ Provision</strong> in the sidebar (or the <strong>+ New</strong> button above) to create your first organization and project.
+          </p>
+          <button class="sm-btn sm-btn-primary" (click)="switchSection('provision')">
+            Provision Organization
+          </button>
+        </section>
+
         <section *ngIf="activeSection === 'overview' && selectedOrg" class="sm-section">
           <h2>{{ selectedOrg.displayName }}</h2>
           <div class="sm-stats">

@@ -80,6 +80,10 @@ type Section = 'overview' | 'projects' | 'secrets' | 'machine-accounts' | 'provi
     .sm-modal-actions { display: flex; gap: 8px; }
     .sm-badge-rw { background: rgba(26,195,125,0.15); color: #1ac37d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
     .sm-badge-ro { background: rgba(122,146,176,0.18); color: #7a92b0; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .sm-nav-item:disabled { opacity: 0.4; cursor: not-allowed; }
+    .sm-empty-state { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; max-width: 600px; }
+    .sm-empty-state h2 { font-size: 22px; font-weight: 600; }
+    .sm-empty-state .sm-info { font-size: 14px; line-height: 1.5; }
   `],
   standalone: false,
   changeDetection: ChangeDetectionStrategy.OnPush,
