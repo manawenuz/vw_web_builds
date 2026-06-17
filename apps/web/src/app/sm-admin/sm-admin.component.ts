@@ -1,103 +1,206 @@
-import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Router } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { SmStateService } from './services/sm-state.service';
+import { SmAdminService } from './services/sm-admin.service';
+import { OrganizationState, ProvisionRequest, ProvisionResponse, SecretEntry } from './models/sm-admin.models';
 
-import { AccountService } from '@bitwarden/common/auth/abstractions/account.service';
-import { getUserId } from '@bitwarden/common/auth/services/account.service';
-import { TokenService } from '@bitwarden/common/auth/abstractions/token.service';
+type Section = 'overview' | 'projects' | 'secrets' | 'machine-accounts' | 'provision' | 'settings';
 
 @Component({
   selector: 'app-sm-admin',
   templateUrl: './sm-admin.component.html',
+  styles: [`
+    :host { display: flex; flex-direction: column; height: 100%; background: var(--color-background, #1a2332); color: var(--color-text, #dce8f8); font-family: inherit; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .sm-loading, .sm-error { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 3rem; height: 100%; color: var(--color-text-muted, #7a92b0); }
+    .sm-error button { padding: 6px 16px; border: 1px solid var(--color-border, rgba(255,255,255,0.12)); border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+    .sm-spinner { width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.12); border-top-color: var(--color-primary, #175ddc); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .sm-topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07)); }
+    .sm-topbar-title { display: flex; flex-direction: column; }
+    .sm-org-name { font-size: 16px; font-weight: 600; }
+    .sm-org-id { font-size: 11px; color: var(--color-text-muted, #7a92b0); font-family: monospace; }
+    .sm-topbar-actions { display: flex; gap: 8px; }
+    .sm-content-wrap { display: flex; flex: 1; overflow: hidden; }
+    .sm-sidebar { width: 220px; min-width: 180px; border-right: 1px solid var(--color-border, rgba(255,255,255,0.07)); display: flex; flex-direction: column; overflow-y: auto; background: var(--color-background-alt, #1e2b3c); }
+    .sm-org-list { padding: 8px; border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07)); }
+    .sm-org-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; cursor: pointer; transition: background 0.15s; }
+    .sm-org-item:hover { background: rgba(255,255,255,0.05); }
+    .sm-org-item.active { background: rgba(91,158,248,0.1); border: 1px solid rgba(91,158,248,0.3); }
+    .sm-org-icon { width: 28px; height: 28px; border-radius: 4px; background: var(--color-primary, #175ddc); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+    .sm-org-info { flex: 1; min-width: 0; }
+    .sm-org-label { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sm-org-stats { font-size: 10px; color: var(--color-text-muted, #7a92b0); }
+    .sm-org-empty { padding: 8px; font-size: 12px; color: var(--color-text-muted, #7a92b0); text-align: center; }
+    .sm-nav { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+    .sm-nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: none; border-radius: 4px; background: transparent; color: var(--color-text-muted, #7a92b0); font-size: 13px; cursor: pointer; text-align: left; width: 100%; transition: background 0.12s; }
+    .sm-nav-item:hover { background: rgba(255,255,255,0.05); color: var(--color-text, #dce8f8); }
+    .sm-nav-item.active { background: rgba(91,158,248,0.1); color: var(--color-primary, #5b9ef8); }
+    .sm-nav-separator { height: 1px; background: var(--color-border, rgba(255,255,255,0.07)); margin: 4px 0; }
+    .sm-badge { margin-left: auto; padding: 1px 6px; border-radius: 10px; background: rgba(91,158,248,0.14); color: #5b9ef8; font-size: 10px; font-weight: 600; }
+    .sm-main { flex: 1; padding: 24px; overflow-y: auto; }
+    .sm-section h2 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+    .sm-stats { display: flex; gap: 16px; margin-bottom: 24px; }
+    .sm-stat { flex: 1; padding: 16px; border-radius: 6px; background: var(--color-background-alt, #1e2b3c); border: 1px solid var(--color-border, rgba(255,255,255,0.07)); text-align: center; }
+    .sm-stat-value { font-size: 28px; font-weight: 700; }
+    .sm-stat-label { font-size: 12px; color: var(--color-text-muted, #7a92b0); margin-top: 4px; }
+    .sm-org-detail { margin-top: 16px; }
+    .sm-org-detail label { display: block; font-size: 12px; color: var(--color-text-muted, #7a92b0); margin-bottom: 4px; }
+    .sm-org-detail code { font-size: 12px; word-break: break-all; padding: 4px 8px; background: var(--color-background-alt, #1e2b3c); border-radius: 4px; display: block; }
+    .sm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .sm-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; color: var(--color-text-muted, #7a92b0); border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07)); }
+    .sm-table td { padding: 10px 12px; border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.07)); }
+    .sm-table code { font-size: 12px; }
+    .sm-empty, .sm-info { padding: 16px 0; color: var(--color-text-muted, #7a92b0); font-size: 13px; }
+    .sm-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border: 1px solid transparent; border-radius: 4px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; font-family: inherit; }
+    .sm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .sm-btn-primary { background: var(--color-primary, #175ddc); color: #fff; }
+    .sm-btn-primary:hover:not(:disabled) { background: #1a6aef; }
+    .sm-btn-ghost { background: transparent; color: var(--color-text, #dce8f8); border-color: var(--color-border, rgba(255,255,255,0.12)); }
+    .sm-btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+    .sm-btn-danger { background: transparent; color: var(--color-danger, #ff5454); border-color: transparent; }
+    .sm-btn-danger:hover:not(:disabled) { background: rgba(255,84,84,0.1); }
+    .sm-btn-xs { padding: 3px 8px; font-size: 11px; }
+    .sm-field { margin-bottom: 16px; }
+    .sm-field label { display: block; font-size: 12px; color: var(--color-text-muted, #7a92b0); margin-bottom: 4px; }
+    .sm-input { width: 100%; max-width: 400px; padding: 8px 12px; background: var(--color-background-alt, #1e2b3c); border: 1px solid var(--color-border, rgba(255,255,255,0.12)); border-radius: 4px; color: var(--color-text, #dce8f8); font-size: 14px; font-family: inherit; }
+    .sm-input:focus { outline: none; border-color: var(--color-primary, #5b9ef8); }
+    .sm-error-text { margin-top: 8px; color: var(--color-danger, #ff5454); font-size: 13px; }
+    .sm-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .sm-modal-content { background: var(--color-background-alt, #1e2b3c); padding: 24px; border-radius: 8px; max-width: 500px; width: 90%; border: 1px solid var(--color-border, rgba(255,255,255,0.12)); }
+    .sm-modal-content h3 { margin-bottom: 8px; }
+    .sm-token-meta { font-size: 12px; color: var(--color-text-muted, #7a92b0); margin-bottom: 12px; }
+    .sm-token-value { display: block; padding: 10px; margin-bottom: 16px; background: var(--color-background, #1a2332); border-radius: 4px; font-size: 12px; word-break: break-all; font-family: monospace; max-height: 80px; overflow-y: auto; }
+    .sm-modal-actions { display: flex; gap: 8px; }
+    .sm-badge-rw { background: rgba(26,195,125,0.15); color: #1ac37d; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .sm-badge-ro { background: rgba(122,146,176,0.18); color: #7a92b0; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  `],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SmAdminComponent implements OnInit, OnDestroy {
-  private injectedStyles: HTMLStyleElement[] = [];
+  organizations: OrganizationState[] = [];
+  selectedOrg: OrganizationState | null = null;
+  activeSection: Section = 'overview';
+  loading = true;
+  error: string | null = null;
+  secrets: SecretEntry[] = [];
+
+  provForm: ProvisionRequest = { orgName: '', project: '', readOnly: false };
+  provSubmitting = false;
+  provError: string | null = null;
+  provResult: ProvisionResponse | null = null;
 
   constructor(
-    private http: HttpClient,
-    private router: Router,
-    private ngZone: NgZone,
-    private tokenService: TokenService,
-    private accountService: AccountService,
+    private stateService: SmStateService,
+    private api: SmAdminService,
   ) {}
 
   async ngOnInit(): Promise<void> {
-    // Get the vault's access token — this is the same JWT used for all vault API calls
-    const userId = await firstValueFrom(getUserId(this.accountService.activeAccount$));
-    const jwt: string | null = await this.tokenService.getAccessToken(userId);
-
+    const jwt = (window as any).__BWS_VAULT_JWT__;
     if (!jwt) {
-      console.error('[sm-admin] No access token available for the active user.');
+      this.error = 'Not authenticated. Please log into the vault first.';
+      this.loading = false;
       return;
     }
-
-    // Expose globals for admin_ui.js embedded mode
-    (window as any).__BWS_EMBEDDED__ = true;
-    (window as any).__BWS_VAULT_JWT__ = jwt;
-    (window as any).__BWS_ANGULAR_ROUTER__ = this.router;
-
-    // Fetch the embedded-mode HTML from Vaultwarden
-    let html: string;
     try {
-      html = await firstValueFrom(
-        this.http.get('/_admin/ui-embedded', { responseType: 'text' }),
-      );
-    } catch (e) {
-      console.error('[sm-admin] Failed to load /_admin/ui-embedded', e);
-      return;
+      const state = await this.api.fetchState();
+      this.stateService.setState(state);
+      this.refreshFromState();
+    } catch (e: any) {
+      this.error = e?.message || 'Failed to load Secrets Manager state.';
+    } finally {
+      this.loading = false;
     }
-
-    // Parse HTML, inject body content and styles into our container
-    this.ngZone.runOutsideAngular(() => {
-      this.injectAdminUI(html);
-    });
   }
 
   ngOnDestroy(): void {
-    // Clean up injected styles
-    this.injectedStyles.forEach((el) => el.remove());
-    this.injectedStyles = [];
-
-    // Clean up globals (prevent leaks across navigation)
-    delete (window as any).__BWS_EMBEDDED__;
-    delete (window as any).__BWS_VAULT_JWT__;
-    delete (window as any).__BWS_ANGULAR_ROUTER__;
+    // no cleanup needed for native components
   }
 
-  private injectAdminUI(html: string): void {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-
-    // Inject <style> blocks (scoped to sm-admin-container via CSS)
-    doc.querySelectorAll('style').forEach((style) => {
-      const el = document.createElement('style');
-      el.textContent = style.textContent;
-      document.head.appendChild(el);
-      this.injectedStyles.push(el);
-    });
-
-    // Inject body content into our container div
-    const container = document.getElementById('sm-admin-container');
-    if (container) {
-      container.innerHTML = doc.body.innerHTML;
+  private refreshFromState(): void {
+    this.organizations = this.stateService.organizations;
+    this.selectedOrg = this.stateService.selectedOrg;
+    if (this.selectedOrg) {
+      this.loadSecrets();
     }
+  }
 
-    // Execute <script> blocks (admin_ui.js will self-invoke)
-    doc.querySelectorAll('script').forEach((script) => {
-      if (script.src) {
-        // External script — create a <script> tag so the browser fetches it
-        const el = document.createElement('script');
-        el.src = script.src;
-        el.defer = true;
-        document.body.appendChild(el);
-      } else if (script.textContent) {
-        // Inline script — evaluate it
-        // eslint-disable-next-line no-new-func
-        const fn = new Function(script.textContent);
-        fn();
-      }
-    });
+  private async loadSecrets(): Promise<void> {
+    if (!this.selectedOrg) return;
+    try {
+      const data = await this.api.listSecrets(this.selectedOrg.id);
+      this.secrets = data.secrets ?? [];
+    } catch {
+      this.secrets = [];
+    }
+  }
+
+  selectOrg(orgId: string): void {
+    this.stateService.selectOrg(orgId);
+    this.refreshFromState();
+    this.activeSection = 'overview';
+  }
+
+  switchSection(section: Section): void {
+    this.activeSection = section;
+    if (section === 'secrets' && this.selectedOrg) {
+      this.loadSecrets();
+    }
+  }
+
+  async refresh(): Promise<void> {
+    this.loading = true;
+    try {
+      const state = await this.api.fetchState();
+      this.stateService.setState(state);
+      this.refreshFromState();
+    } catch (e: any) {
+      this.error = e?.message || 'Refresh failed.';
+    }
+    this.loading = false;
+  }
+
+  async provision(e: Event): Promise<void> {
+    e.preventDefault();
+    this.provError = null;
+    if (!this.provForm.orgName.trim() || !this.provForm.project.trim()) {
+      this.provError = 'Organization name and project name are required.';
+      return;
+    }
+    this.provSubmitting = true;
+    try {
+      this.provResult = await this.api.provision(this.provForm);
+      this.provForm = { orgName: '', project: '', readOnly: false };
+      await this.refresh();
+    } catch (err: any) {
+      this.provError = err?.message || 'Provision failed.';
+    } finally {
+      this.provSubmitting = false;
+    }
+  }
+
+  async deleteProject(orgId: string, projectId: string): Promise<void> {
+    if (!confirm('Delete this project and all its secrets?')) return;
+    try {
+      await this.api.deleteProject(orgId, projectId);
+    } catch (err: any) {
+      alert('Delete failed: ' + (err?.message || 'Unknown error'));
+    }
+    void this.refresh();
+  }
+
+  async revokeToken(orgId: string, clientId: string): Promise<void> {
+    if (!confirm('Revoke this machine account? This permanently invalidates its access token.')) return;
+    try {
+      await this.api.revokeToken(orgId, clientId);
+    } catch (err: any) {
+      alert('Revoke failed: ' + (err?.message || 'Unknown error'));
+    }
+    void this.refresh();
+  }
+
+  copyToken(): void {
+    if (!this.provResult) return;
+    void navigator.clipboard?.writeText(this.provResult.accessToken);
   }
 }
