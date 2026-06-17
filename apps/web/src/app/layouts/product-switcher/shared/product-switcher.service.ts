@@ -231,7 +231,7 @@ export class ProductSwitcherService {
           sm: {
             name: "Secrets Manager",
             icon: "bwi-cli",
-            appRoute: smOrg?.id ? ["/sm", smOrg.id] : ["/sm"],
+            appRoute: ["sm"],
             marketingRoute: {
               route: "/sm-landing",
               external: false,
