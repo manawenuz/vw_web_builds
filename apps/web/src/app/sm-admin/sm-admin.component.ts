@@ -1,4 +1,10 @@
 import { Component, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+
+import { AccountService } from '@bitwarden/common/auth/abstractions/account.service';
+import { TokenService } from '@bitwarden/common/auth/abstractions/token.service';
+import { getUserId } from '@bitwarden/common/auth/services/account.service';
+
 import { SmStateService } from './services/sm-state.service';
 import { SmAdminService } from './services/sm-admin.service';
 import { OrganizationState, ProvisionRequest, ProvisionResponse, SecretEntry } from './models/sm-admin.models';
@@ -93,15 +99,20 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   constructor(
     private stateService: SmStateService,
     private api: SmAdminService,
+    private accountService: AccountService,
+    private tokenService: TokenService,
   ) {}
 
   async ngOnInit(): Promise<void> {
+    await this.ensureVaultJwt();
+
     const jwt = (window as any).__BWS_VAULT_JWT__;
     if (!jwt) {
       this.error = 'Not authenticated. Please log into the vault first.';
       this.loading = false;
       return;
     }
+
     try {
       const state = await this.api.fetchState();
       this.stateService.setState(state);
@@ -114,7 +125,25 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // no cleanup needed for native components
+    delete (window as any).__BWS_VAULT_JWT__;
+  }
+
+  private async ensureVaultJwt(): Promise<void> {
+    if ((window as any).__BWS_VAULT_JWT__) {
+      return;
+    }
+    try {
+      const userId = await firstValueFrom(this.accountService.activeAccount$.pipe(getUserId));
+      if (!userId) {
+        return;
+      }
+      const jwt = await this.tokenService.getAccessToken(userId);
+      if (jwt) {
+        (window as any).__BWS_VAULT_JWT__ = jwt;
+      }
+    } catch (err) {
+      // Leave window.__BWS_VAULT_JWT__ unset; the UI will show the not-authenticated state.
+    }
   }
 
   private refreshFromState(): void {
