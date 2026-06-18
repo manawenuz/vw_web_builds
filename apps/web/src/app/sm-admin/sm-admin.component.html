@@ -16,16 +16,12 @@
     <!-- Top bar -->
     <header class="sm-topbar">
       <div class="sm-topbar-title">
-        <span class="sm-org-name">{{ selectedOrg?.displayName || 'Secrets Manager' }}</span>
+        <span class="sm-org-name">{{ selectedOrg?.displayName || "Secrets Manager" }}</span>
         <span *ngIf="selectedOrg" class="sm-org-id">{{ selectedOrg.id }}</span>
       </div>
       <div class="sm-topbar-actions">
-        <button class="sm-btn sm-btn-primary" (click)="switchSection('provision')">
-          + New
-        </button>
-        <button class="sm-btn sm-btn-ghost" (click)="refresh()" title="Refresh">
-          ↻
-        </button>
+        <button class="sm-btn sm-btn-primary" (click)="switchSection('provision')">+ New</button>
+        <button class="sm-btn sm-btn-ghost" (click)="refresh()" title="Refresh">↻</button>
       </div>
     </header>
 
@@ -34,9 +30,12 @@
       <aside class="sm-sidebar">
         <!-- Org list -->
         <div class="sm-org-list">
-          <div *ngFor="let org of organizations" class="sm-org-item"
-               [class.active]="selectedOrg?.id === org.id"
-               (click)="selectOrg(org.id)">
+          <div
+            *ngFor="let org of organizations"
+            class="sm-org-item"
+            [class.active]="selectedOrg?.id === org.id"
+            (click)="selectOrg(org.id)"
+          >
             <div class="sm-org-icon">{{ org.displayName.slice(0, 2).toUpperCase() }}</div>
             <div class="sm-org-info">
               <div class="sm-org-label">{{ org.displayName }}</div>
@@ -52,36 +51,54 @@
 
         <!-- Nav -->
         <nav class="sm-nav">
-          <button class="sm-nav-item" [class.active]="activeSection === 'overview'"
-                  (click)="switchSection('overview')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'overview'"
+            (click)="switchSection('overview')"
+          >
             Overview
           </button>
-          <button class="sm-nav-item" [class.active]="activeSection === 'projects'"
-                  [disabled]="!selectedOrg"
-                  (click)="switchSection('projects')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'projects'"
+            [disabled]="!selectedOrg"
+            (click)="switchSection('projects')"
+          >
             Projects
             <span class="sm-badge">{{ selectedOrg?.projects?.length || 0 }}</span>
           </button>
-          <button class="sm-nav-item" [class.active]="activeSection === 'secrets'"
-                  [disabled]="!selectedOrg"
-                  (click)="switchSection('secrets')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'secrets'"
+            [disabled]="!selectedOrg"
+            (click)="switchSection('secrets')"
+          >
             Secrets
             <span class="sm-badge">{{ selectedOrg?.secretCount || 0 }}</span>
           </button>
-          <button class="sm-nav-item" [class.active]="activeSection === 'machine-accounts'"
-                  [disabled]="!selectedOrg"
-                  (click)="switchSection('machine-accounts')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'machine-accounts'"
+            [disabled]="!selectedOrg"
+            (click)="switchSection('machine-accounts')"
+          >
             Machine Accounts
             <span class="sm-badge">{{ selectedOrg?.machineAccounts?.length || 0 }}</span>
           </button>
           <div class="sm-nav-separator"></div>
-          <button class="sm-nav-item" [class.active]="activeSection === 'provision'"
-                  (click)="switchSection('provision')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'provision'"
+            (click)="switchSection('provision')"
+          >
             + Provision
           </button>
-          <button class="sm-nav-item" [class.active]="activeSection === 'settings'"
-                  [disabled]="!selectedOrg"
-                  (click)="switchSection('settings')">
+          <button
+            class="sm-nav-item"
+            [class.active]="activeSection === 'settings'"
+            [disabled]="!selectedOrg"
+            (click)="switchSection('settings')"
+          >
             Settings
           </button>
         </nav>
@@ -90,10 +107,14 @@
       <!-- Main content -->
       <main class="sm-main">
         <!-- Overview -->
-        <section *ngIf="activeSection === 'overview' && !selectedOrg" class="sm-section sm-empty-state">
+        <section
+          *ngIf="activeSection === 'overview' && !selectedOrg"
+          class="sm-section sm-empty-state"
+        >
           <h2>Welcome to Secrets Manager</h2>
           <p class="sm-info">
-            No organizations yet. Click <strong>+ Provision</strong> in the sidebar (or the <strong>+ New</strong> button above) to create your first organization and project.
+            No organizations yet. Click <strong>+ Provision</strong> in the sidebar (or the
+            <strong>+ New</strong> button above) to create your first organization and project.
           </p>
           <button class="sm-btn sm-btn-primary" (click)="switchSection('provision')">
             Provision Organization
@@ -127,15 +148,21 @@
           <h2>Projects</h2>
           <table class="sm-table" *ngIf="(selectedOrg.projects?.length || 0) > 0; else noProjects">
             <thead>
-              <tr><th>Name</th><th>Created</th><th></th></tr>
+              <tr>
+                <th>Name</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
             </thead>
             <tbody>
               <tr *ngFor="let p of selectedOrg.projects">
                 <td>{{ p.displayName }}</td>
-                <td>{{ p.creationDate | date:'medium' }}</td>
+                <td>{{ p.creationDate | date: "medium" }}</td>
                 <td>
-                  <button class="sm-btn sm-btn-danger sm-btn-xs"
-                          (click)="deleteProject(selectedOrg.id, p.id)">
+                  <button
+                    class="sm-btn sm-btn-danger sm-btn-xs"
+                    (click)="deleteProject(selectedOrg.id, p.id)"
+                  >
                     Delete
                   </button>
                 </td>
@@ -151,15 +178,22 @@
         <section *ngIf="activeSection === 'secrets' && selectedOrg" class="sm-section">
           <h2>Secrets</h2>
           <p class="sm-info">
-            {{ selectedOrg.secretCount || 0 }} secrets in this org.
-            Secrets are encrypted end-to-end and cannot be read from the admin panel.
+            {{ selectedOrg.secretCount || 0 }} secrets in this org. Secrets are encrypted end-to-end
+            and cannot be read from the admin panel.
           </p>
           <table class="sm-table" *ngIf="secrets.length > 0">
-            <thead><tr><th>Secret ID</th><th>Created</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Secret ID</th>
+                <th>Created</th>
+              </tr>
+            </thead>
             <tbody>
               <tr *ngFor="let s of secrets">
-                <td><code>{{ s.id.slice(0, 24) }}…</code></td>
-                <td>{{ s.creationDate | date:'medium' }}</td>
+                <td>
+                  <code>{{ s.id.slice(0, 24) }}…</code>
+                </td>
+                <td>{{ s.creationDate | date: "medium" }}</td>
               </tr>
             </tbody>
           </table>
@@ -169,19 +203,32 @@
         <section *ngIf="activeSection === 'machine-accounts' && selectedOrg" class="sm-section">
           <h2>Machine Accounts</h2>
           <table class="sm-table" *ngIf="(selectedOrg.machineAccounts?.length || 0) > 0; else noMa">
-            <thead><tr><th>Client ID</th><th>Access</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Client ID</th>
+                <th>Access</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               <tr *ngFor="let ma of selectedOrg.machineAccounts">
-                <td><code>{{ ma.clientId.slice(0, 24) }}…</code></td>
                 <td>
-                  <span class="sm-badge" [class.sm-badge-rw]="ma.write"
-                        [class.sm-badge-ro]="!ma.write">
-                    {{ ma.write ? 'Read-Write' : 'Read-Only' }}
+                  <code>{{ ma.clientId.slice(0, 24) }}…</code>
+                </td>
+                <td>
+                  <span
+                    class="sm-badge"
+                    [class.sm-badge-rw]="ma.write"
+                    [class.sm-badge-ro]="!ma.write"
+                  >
+                    {{ ma.write ? "Read-Write" : "Read-Only" }}
                   </span>
                 </td>
                 <td>
-                  <button class="sm-btn sm-btn-danger sm-btn-xs"
-                          (click)="revokeToken(selectedOrg.id, ma.clientId)">
+                  <button
+                    class="sm-btn sm-btn-danger sm-btn-xs"
+                    (click)="revokeToken(selectedOrg.id, ma.clientId)"
+                  >
                     Revoke
                   </button>
                 </td>
@@ -199,22 +246,34 @@
           <form (submit)="provision($event)">
             <div class="sm-field">
               <label>Organization Name</label>
-              <input type="text" [(ngModel)]="provForm.orgName" name="orgName"
-                     placeholder="e.g. my-company" required class="sm-input">
+              <input
+                type="text"
+                [(ngModel)]="provForm.orgName"
+                name="orgName"
+                placeholder="e.g. my-company"
+                required
+                class="sm-input"
+              />
             </div>
             <div class="sm-field">
               <label>Project Name</label>
-              <input type="text" [(ngModel)]="provForm.project" name="project"
-                     placeholder="e.g. webapp-prod" required class="sm-input">
+              <input
+                type="text"
+                [(ngModel)]="provForm.project"
+                name="project"
+                placeholder="e.g. webapp-prod"
+                required
+                class="sm-input"
+              />
             </div>
             <div class="sm-field">
               <label>
-                <input type="checkbox" [(ngModel)]="provForm.readOnly" name="readOnly">
+                <input type="checkbox" [(ngModel)]="provForm.readOnly" name="readOnly" />
                 Read-only access token
               </label>
             </div>
             <button type="submit" class="sm-btn sm-btn-primary" [disabled]="provSubmitting">
-              {{ provSubmitting ? 'Provisioning...' : 'Provision' }}
+              {{ provSubmitting ? "Provisioning..." : "Provision" }}
             </button>
             <div *ngIf="provError" class="sm-error-text">{{ provError }}</div>
           </form>
@@ -224,8 +283,8 @@
             <div class="sm-modal-content">
               <h3>Access Token Created</h3>
               <p class="sm-token-meta">
-                Org: {{ provResult.orgId }} · Project: {{ provResult.projectId }}
-                · Secrets: {{ provResult.secretCount }}
+                Org: {{ provResult.orgId }} · Project: {{ provResult.projectId }} · Secrets:
+                {{ provResult.secretCount }}
               </p>
               <code class="sm-token-value">{{ provResult.accessToken }}</code>
               <div class="sm-modal-actions">
