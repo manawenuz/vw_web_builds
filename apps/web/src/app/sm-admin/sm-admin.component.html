@@ -1,14 +1,168 @@
-<div id="sm-admin-container" class="sm-admin-container">
-  <iframe
-    *ngIf="ready(); else status"
-    class="sm-admin-frame"
-    src="/_admin/ui-embedded"
-    title="Secrets Manager"
-  ></iframe>
+<div class="status" *ngIf="!ready()">
+  <p [class.error]="error()">{{ error() || "Loading Secrets Manager..." }}</p>
+</div>
 
-  <ng-template #status>
-    <p class="sm-admin-status" [class.sm-admin-error]="error()">
-      {{ error() || "Loading Secrets Manager..." }}
-    </p>
-  </ng-template>
+<div class="sm-shell" *ngIf="ready()">
+  <aside class="sm-sidebar">
+    <div class="brand">
+      <div class="brand-title">bitwarden</div>
+      <div class="brand-subtitle">Secrets Manager</div>
+    </div>
+
+    <div class="stack">
+      <button
+        type="button"
+        class="org-button"
+        *ngFor="let org of organizations()"
+        [class.active]="selectedOrgId() === org.id"
+        (click)="selectOrg(org)"
+      >
+        <span class="org-avatar">{{ orgLabel(org).slice(0, 2).toUpperCase() }}</span>
+        <span>
+          <strong>{{ orgLabel(org) }}</strong>
+          <div class="muted">
+            {{ org.projects.length }} projects · {{ org.secretCount }} secrets
+          </div>
+        </span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <div>
+        <h1>{{ selectedOrg() ? orgLabel(selectedOrg()!) : "Secrets Manager" }}</h1>
+        <div class="muted" *ngIf="selectedOrg()">{{ selectedOrg()!.id }}</div>
+      </div>
+      <div class="button-row">
+        <button type="button" class="btn" (click)="refreshState()" [disabled]="loading()">
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <p class="error" *ngIf="error()">{{ error() }}</p>
+
+    <div class="grid">
+      <section class="panel stack">
+        <div>
+          <h2>Secrets</h2>
+          <p class="muted" *ngIf="!selectedOrg()">Create a secure organization to begin.</p>
+          <div class="callout" *ngIf="orgKeyStatus()">{{ orgKeyStatus() }}</div>
+        </div>
+
+        <table *ngIf="decryptedSecrets().length > 0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Value</th>
+              <th>Project</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let secret of decryptedSecrets()">
+              <td>
+                <strong>{{ secret.label }}</strong>
+                <div class="muted">{{ secret.id }}</div>
+              </td>
+              <td class="secret-value">{{ secret.secretValue }}</td>
+              <td>{{ secret.projectLabel }}</td>
+              <td class="muted">{{ secret.revisionDate | date: "medium" }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p
+          class="muted"
+          *ngIf="selectedOrg() && !orgKeyStatus() && decryptedSecrets().length === 0"
+        >
+          No secrets yet.
+        </p>
+
+        <div class="panel stack" *ngIf="selectedOrg() && !orgKeyStatus()">
+          <h3>New secret</h3>
+          <div class="field">
+            <label for="secret-name">Name</label>
+            <input id="secret-name" [(ngModel)]="newSecret.name" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="secret-value">Value</label>
+            <textarea id="secret-value" [(ngModel)]="newSecret.value"></textarea>
+          </div>
+          <div class="field">
+            <label for="secret-note">Notes</label>
+            <textarea id="secret-note" [(ngModel)]="newSecret.note"></textarea>
+          </div>
+          <div class="field">
+            <label for="secret-project">Project</label>
+            <select id="secret-project" [(ngModel)]="newSecret.projectId">
+              <option value="">Unassigned</option>
+              <option *ngFor="let project of projectOptions()" [value]="project.id">
+                {{ project.label }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <button
+              type="button"
+              class="btn btn-primary"
+              (click)="createSecret()"
+              [disabled]="loading()"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="stack">
+        <section class="panel stack">
+          <h2>Secure provision</h2>
+          <p class="muted">
+            Creates a BWS organization without sending plaintext secret data or the BWS organization
+            key to the server.
+          </p>
+
+          <div class="field">
+            <label for="org-name">Organization name</label>
+            <input id="org-name" [(ngModel)]="newOrg.orgName" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="project-name">Project name</label>
+            <input id="project-name" [(ngModel)]="newOrg.projectName" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="initial-secret-name">Initial secret name</label>
+            <input id="initial-secret-name" [(ngModel)]="newOrg.secretName" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="initial-secret-value">Initial secret value</label>
+            <textarea id="initial-secret-value" [(ngModel)]="newOrg.secretValue"></textarea>
+          </div>
+          <div class="field">
+            <label for="initial-secret-note">Initial secret notes</label>
+            <textarea id="initial-secret-note" [(ngModel)]="newOrg.secretNote"></textarea>
+          </div>
+          <div>
+            <button
+              type="button"
+              class="btn btn-primary"
+              (click)="createSecureOrg()"
+              [disabled]="loading()"
+            >
+              Provision
+            </button>
+          </div>
+        </section>
+
+        <section class="panel stack" *ngIf="generatedAccessToken()">
+          <h2>Machine token</h2>
+          <p class="muted">Copy this now. It is shown once and is needed by BWS clients.</p>
+          <div class="token-box">{{ generatedAccessToken() }}</div>
+          <button type="button" class="btn" (click)="copyGeneratedToken()">Copy token</button>
+        </section>
+      </aside>
+    </div>
+  </main>
 </div>

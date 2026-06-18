@@ -7,6 +7,11 @@ import {
   ProvisionResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  EncryptedProvisionRequest,
+  EncryptedProvisionResponse,
+  OrgUserKeyResponse,
+  SecretResponse,
+  SecretWriteRequest,
   SecretsListResponse,
 } from "../models/sm-admin.models";
 
@@ -55,6 +60,20 @@ export class SmAdminService {
     return this.request<ProvisionResponse>("POST", "/_admin/provision", req);
   }
 
+  async provisionEncrypted(req: EncryptedProvisionRequest): Promise<EncryptedProvisionResponse> {
+    return this.request<EncryptedProvisionResponse>("POST", "/_admin/provision-encrypted", req);
+  }
+
+  async getOrgUserKey(orgId: string): Promise<OrgUserKeyResponse> {
+    return this.request<OrgUserKeyResponse>("GET", `/_admin/orgs/${orgId}/key`);
+  }
+
+  async setOrgUserKey(orgId: string, encryptedOrgKey: string): Promise<OrgUserKeyResponse> {
+    return this.request<OrgUserKeyResponse>("PUT", `/_admin/orgs/${orgId}/key`, {
+      encryptedOrgKey,
+    });
+  }
+
   async createProject(orgId: string, req: CreateProjectRequest): Promise<CreateProjectResponse> {
     return this.request<CreateProjectResponse>("POST", `/_admin/orgs/${orgId}/projects`, req);
   }
@@ -69,5 +88,25 @@ export class SmAdminService {
 
   async listSecrets(orgId: string): Promise<SecretsListResponse> {
     return this.request<SecretsListResponse>("GET", `/_admin/orgs/${orgId}/secrets`);
+  }
+
+  async createSecret(orgId: string, req: SecretWriteRequest): Promise<SecretResponse> {
+    return this.request<SecretResponse>("POST", `/_admin/orgs/${orgId}/secrets`, req);
+  }
+
+  async updateSecret(
+    orgId: string,
+    secretId: string,
+    req: SecretWriteRequest,
+  ): Promise<SecretResponse> {
+    return this.request<SecretResponse>("PUT", `/_admin/orgs/${orgId}/secrets/${secretId}`, req);
+  }
+
+  async deleteSecrets(orgId: string, ids: string[]): Promise<{ deletedSecretIds: string[] }> {
+    return this.request<{ deletedSecretIds: string[] }>(
+      "POST",
+      `/_admin/orgs/${orgId}/secrets/delete`,
+      ids,
+    );
   }
 }
