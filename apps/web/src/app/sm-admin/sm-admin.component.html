@@ -3,166 +3,451 @@
 </div>
 
 <div class="sm-shell" *ngIf="ready()">
-  <aside class="sm-sidebar">
-    <div class="brand">
-      <div class="brand-title">bitwarden</div>
-      <div class="brand-subtitle">Secrets Manager</div>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="shield" aria-hidden="true"></span>
+      <strong>bitwarden</strong>
+      <span>Secrets Manager</span>
     </div>
+  </header>
 
-    <div class="stack">
+  <div class="product-layout">
+    <aside class="sm-sidebar">
+      <div class="brand">
+        <div class="brand-main">
+          <span class="shield shield-large" aria-hidden="true"></span>
+          <span>bitwarden</span>
+        </div>
+        <div class="brand-subtitle">Secrets Manager</div>
+      </div>
+
+      <div class="org-group" *ngIf="organizations().length > 0">
+        <button
+          type="button"
+          class="org-heading"
+          *ngFor="let org of organizations()"
+          [class.active]="selectedOrgId() === org.id"
+          (click)="selectOrg(org)"
+        >
+          <span class="chevron">▾</span>
+          <span class="org-heading-name">{{ orgLabel(org) }}</span>
+        </button>
+
+        <div class="org-nav" *ngIf="selectedOrg() as org">
+          <button
+            type="button"
+            class="nav-item org-summary"
+            [class.active]="activeSection() === 'overview'"
+            (click)="setSection('overview')"
+          >
+            <span class="org-avatar">{{ orgInitials(org) }}</span>
+            <span class="org-summary-copy">
+              <strong>{{ orgLabel(org) }}</strong>
+              <small>{{ org.projects.length }} projects · {{ org.secretCount }} secrets</small>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item"
+            [class.active]="activeSection() === 'projects'"
+            (click)="setSection('projects')"
+          >
+            <span class="nav-icon">▦</span>
+            <span>Projects</span>
+            <span class="nav-count">{{ org.projects.length }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item"
+            [class.active]="activeSection() === 'secrets'"
+            (click)="setSection('secrets')"
+          >
+            <span class="nav-icon">⌁</span>
+            <span>Secrets</span>
+            <span class="nav-count">{{ org.secretCount }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="nav-item"
+            [class.active]="activeSection() === 'machine-accounts'"
+            (click)="setSection('machine-accounts')"
+          >
+            <span class="nav-icon">⌘</span>
+            <span>Machine accounts</span>
+            <span class="nav-count">{{ org.machineAccounts.length }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="nav-separator"></div>
+
       <button
         type="button"
-        class="org-button"
-        *ngFor="let org of organizations()"
-        [class.active]="selectedOrgId() === org.id"
-        (click)="selectOrg(org)"
+        class="nav-item"
+        [class.active]="activeSection() === 'integrations'"
+        (click)="setSection('integrations')"
       >
-        <span class="org-avatar">{{ orgLabel(org).slice(0, 2).toUpperCase() }}</span>
-        <span>
-          <strong>{{ orgLabel(org) }}</strong>
-          <div class="muted">
-            {{ org.projects.length }} projects · {{ org.secretCount }} secrets
-          </div>
-        </span>
+        <span class="nav-icon">⌘</span>
+        <span>Integrations</span>
       </button>
-    </div>
-  </aside>
+      <button
+        type="button"
+        class="nav-item"
+        [class.active]="activeSection() === 'trash'"
+        (click)="setSection('trash')"
+      >
+        <span class="nav-icon">⌫</span>
+        <span>Trash</span>
+      </button>
 
-  <main class="main">
-    <div class="toolbar">
-      <div>
-        <h1>{{ selectedOrg() ? orgLabel(selectedOrg()!) : "Secrets Manager" }}</h1>
-        <div class="muted" *ngIf="selectedOrg()">{{ selectedOrg()!.id }}</div>
+      <div class="nav-separator"></div>
+
+      <button
+        type="button"
+        class="nav-item"
+        [class.active]="activeSection() === 'settings'"
+        (click)="setSection('settings')"
+      >
+        <span class="nav-icon">⚙</span>
+        <span>Settings</span>
+      </button>
+      <button
+        type="button"
+        class="nav-item nav-subitem"
+        [class.active]="activeSection() === 'import'"
+        (click)="setSection('import')"
+      >
+        Import
+      </button>
+      <button
+        type="button"
+        class="nav-item nav-subitem"
+        [class.active]="activeSection() === 'export'"
+        (click)="setSection('export')"
+      >
+        Export
+      </button>
+
+      <div class="sidebar-bottom">
+        <a class="mode-item" href="/#/vault">Password Manager</a>
+        <div class="mode-item active">Secrets Manager</div>
+        <a class="mode-item" href="/#/admin-console">Admin Console</a>
       </div>
-      <div class="button-row">
-        <button type="button" class="btn" (click)="refreshState()" [disabled]="loading()">
-          Refresh
+    </aside>
+
+    <main class="main">
+      <div class="content-actions">
+        <button
+          type="button"
+          class="btn btn-primary"
+          (click)="openNewSecret()"
+          [disabled]="loading() || !selectedOrg()"
+        >
+          + New
+        </button>
+        <button
+          type="button"
+          class="btn btn-icon"
+          (click)="refreshState()"
+          [disabled]="loading()"
+          aria-label="Refresh"
+          title="Refresh"
+        >
+          ↻
         </button>
       </div>
-    </div>
 
-    <p class="error" *ngIf="error()">{{ error() }}</p>
-
-    <div class="grid">
-      <section class="panel stack">
-        <div>
-          <h2>Secrets</h2>
-          <p class="muted" *ngIf="!selectedOrg()">Create a secure organization to begin.</p>
-          <div class="callout" *ngIf="orgKeyStatus()">{{ orgKeyStatus() }}</div>
-        </div>
-
-        <table *ngIf="decryptedSecrets().length > 0">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Value</th>
-              <th>Project</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let secret of decryptedSecrets()">
-              <td>
-                <strong>{{ secret.label }}</strong>
-                <div class="muted">{{ secret.id }}</div>
-              </td>
-              <td class="secret-value">{{ secret.secretValue }}</td>
-              <td>{{ secret.projectLabel }}</td>
-              <td class="muted">{{ secret.revisionDate | date: "medium" }}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p
-          class="muted"
-          *ngIf="selectedOrg() && !orgKeyStatus() && decryptedSecrets().length === 0"
-        >
-          No secrets yet.
-        </p>
-
-        <div class="panel stack" *ngIf="selectedOrg() && !orgKeyStatus()">
-          <h3>New secret</h3>
-          <div class="field">
-            <label for="secret-name">Name</label>
-            <input id="secret-name" [(ngModel)]="newSecret.name" autocomplete="off" />
-          </div>
-          <div class="field">
-            <label for="secret-value">Value</label>
-            <textarea id="secret-value" [(ngModel)]="newSecret.value"></textarea>
-          </div>
-          <div class="field">
-            <label for="secret-note">Notes</label>
-            <textarea id="secret-note" [(ngModel)]="newSecret.note"></textarea>
-          </div>
-          <div class="field">
-            <label for="secret-project">Project</label>
-            <select id="secret-project" [(ngModel)]="newSecret.projectId">
-              <option value="">Unassigned</option>
-              <option *ngFor="let project of projectOptions()" [value]="project.id">
-                {{ project.label }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <button
-              type="button"
-              class="btn btn-primary"
-              (click)="createSecret()"
-              [disabled]="loading()"
-            >
-              Save
-            </button>
-          </div>
-        </div>
+      <section class="page-header" *ngIf="selectedOrg() as org">
+        <h1>{{ orgLabel(org) }}</h1>
+        <div class="muted mono">{{ org.id }}</div>
       </section>
 
-      <aside class="stack">
-        <section class="panel stack">
-          <h2>Secure provision</h2>
-          <p class="muted">
-            Creates a BWS organization without sending plaintext secret data or the BWS organization
-            key to the server.
-          </p>
+      <p class="error" *ngIf="error()">{{ error() }}</p>
+      <div class="callout" *ngIf="orgKeyStatus()">{{ orgKeyStatus() }}</div>
 
-          <div class="field">
-            <label for="org-name">Organization name</label>
-            <input id="org-name" [(ngModel)]="newOrg.orgName" autocomplete="off" />
+      <ng-container [ngSwitch]="activeSection()">
+        <section *ngSwitchCase="'overview'" class="section-stack">
+          <ng-container
+            *ngTemplateOutlet="projectsSection; context: { preview: true }"
+          ></ng-container>
+          <ng-container
+            *ngTemplateOutlet="secretsSection; context: { preview: true }"
+          ></ng-container>
+        </section>
+
+        <section *ngSwitchCase="'projects'">
+          <ng-container
+            *ngTemplateOutlet="projectsSection; context: { preview: false }"
+          ></ng-container>
+        </section>
+
+        <section *ngSwitchCase="'secrets'">
+          <ng-container
+            *ngTemplateOutlet="secretsSection; context: { preview: false }"
+          ></ng-container>
+        </section>
+
+        <section *ngSwitchCase="'machine-accounts'" class="section-block">
+          <div class="section-title-row">
+            <h2>Machine accounts</h2>
           </div>
-          <div class="field">
-            <label for="project-name">Project name</label>
-            <input id="project-name" [(ngModel)]="newOrg.projectName" autocomplete="off" />
-          </div>
-          <div class="field">
-            <label for="initial-secret-name">Initial secret name</label>
-            <input id="initial-secret-name" [(ngModel)]="newOrg.secretName" autocomplete="off" />
-          </div>
-          <div class="field">
-            <label for="initial-secret-value">Initial secret value</label>
-            <textarea id="initial-secret-value" [(ngModel)]="newOrg.secretValue"></textarea>
-          </div>
-          <div class="field">
-            <label for="initial-secret-note">Initial secret notes</label>
-            <textarea id="initial-secret-note" [(ngModel)]="newOrg.secretNote"></textarea>
-          </div>
-          <div>
-            <button
-              type="button"
-              class="btn btn-primary"
-              (click)="createSecureOrg()"
-              [disabled]="loading()"
-            >
-              Provision
-            </button>
+          <div class="data-table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Access</th>
+                  <th>Client ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let account of selectedOrg()?.machineAccounts ?? []">
+                  <td>
+                    <span class="item-link">Machine account</span>
+                    <div class="muted mono">{{ account.serviceAccountId }}</div>
+                  </td>
+                  <td>
+                    <span
+                      class="badge"
+                      [class.badge-rw]="account.write"
+                      [class.badge-ro]="!account.write"
+                    >
+                      {{ account.write ? "Can read, write" : "Can read" }}
+                    </span>
+                  </td>
+                  <td class="mono muted">{{ account.clientId }}</td>
+                </tr>
+                <tr *ngIf="(selectedOrg()?.machineAccounts?.length ?? 0) === 0">
+                  <td colspan="3" class="empty-cell">No machine accounts.</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
-        <section class="panel stack" *ngIf="generatedAccessToken()">
-          <h2>Machine token</h2>
-          <p class="muted">Copy this now. It is shown once and is needed by BWS clients.</p>
-          <div class="token-box">{{ generatedAccessToken() }}</div>
-          <button type="button" class="btn" (click)="copyGeneratedToken()">Copy token</button>
+        <section *ngSwitchCase="'integrations'" class="empty-view">
+          <h2>Integrations</h2>
+          <p class="muted">Integrations are not enabled for this build.</p>
         </section>
-      </aside>
+
+        <section *ngSwitchCase="'trash'" class="empty-view">
+          <h2>Trash</h2>
+          <p class="muted">Trash is empty.</p>
+        </section>
+
+        <section *ngSwitchCase="'settings'" class="empty-view">
+          <h2>Settings</h2>
+          <label class="field">
+            <span>Organization ID</span>
+            <input [value]="selectedOrg()?.id ?? ''" readonly />
+          </label>
+        </section>
+
+        <section *ngSwitchCase="'import'" class="empty-view">
+          <h2>Import</h2>
+          <p class="muted">Import is not enabled for this build.</p>
+        </section>
+
+        <section *ngSwitchCase="'export'" class="empty-view">
+          <h2>Export</h2>
+          <p class="muted">Export is not enabled for this build.</p>
+        </section>
+      </ng-container>
+
+      <div class="empty-view" *ngIf="organizations().length === 0">
+        <h2>No Secrets Manager organizations</h2>
+        <button type="button" class="btn btn-primary" (click)="openProvision()">
+          Provision organization
+        </button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<ng-template #projectsSection let-preview="preview">
+  <section class="section-block">
+    <div class="section-title-row">
+      <button type="button" class="section-toggle" aria-label="Projects expanded">▾</button>
+      <h2>Projects</h2>
+      <button *ngIf="preview" type="button" class="link-button" (click)="setSection('projects')">
+        View all
+      </button>
     </div>
-  </main>
+
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="checkbox-cell">
+              <input type="checkbox" aria-label="Select all projects" />
+            </th>
+            <th>Name</th>
+            <th>Last edited</th>
+            <th class="options-cell"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let project of visibleProjects(preview)">
+            <td><input type="checkbox" aria-label="Select project" /></td>
+            <td>
+              <span class="folder-icon" aria-hidden="true"></span>
+              <span class="item-link">{{ project.label }}</span>
+              <div class="muted mono">{{ project.id }}</div>
+            </td>
+            <td class="muted">{{ project.creationDate | date: "medium" }}</td>
+            <td class="options-cell">
+              <button type="button" class="row-options" aria-label="Project options">...</button>
+            </td>
+          </tr>
+          <tr *ngIf="visibleProjects(preview).length === 0">
+            <td colspan="4" class="empty-cell">No projects.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</ng-template>
+
+<ng-template #secretsSection let-preview="preview">
+  <section class="section-block">
+    <div class="section-title-row">
+      <button type="button" class="section-toggle" aria-label="Secrets expanded">▾</button>
+      <h2>Secrets</h2>
+      <button *ngIf="preview" type="button" class="link-button" (click)="setSection('secrets')">
+        View all
+      </button>
+    </div>
+
+    <div class="data-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="checkbox-cell"><input type="checkbox" aria-label="Select all secrets" /></th>
+            <th>Name</th>
+            <th>Project</th>
+            <th>Last edited</th>
+            <th class="options-cell">Options</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let secret of visibleSecrets(preview)">
+            <td><input type="checkbox" aria-label="Select secret" /></td>
+            <td>
+              <span class="key-icon" aria-hidden="true"></span>
+              <span class="item-link">{{ secret.label }}</span>
+              <div class="muted mono">{{ secret.id }}</div>
+            </td>
+            <td>{{ secret.projectLabel }}</td>
+            <td class="muted">{{ secret.revisionDate | date: "medium" }}</td>
+            <td class="options-cell">
+              <button type="button" class="row-options" aria-label="Secret options">...</button>
+            </td>
+          </tr>
+          <tr *ngIf="visibleSecrets(preview).length === 0">
+            <td colspan="5" class="empty-cell">No secrets.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</ng-template>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'secret'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>New secret</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Name <small>(required)</small></span>
+        <input [(ngModel)]="newSecret.name" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Value <small>(required)</small></span>
+        <textarea [(ngModel)]="newSecret.value"></textarea>
+      </label>
+      <label class="field">
+        <span>Notes</span>
+        <textarea [(ngModel)]="newSecret.note"></textarea>
+      </label>
+      <label class="field">
+        <span>Project</span>
+        <select [(ngModel)]="newSecret.projectId">
+          <option value="">Unassigned</option>
+          <option *ngFor="let project of projectOptions()" [value]="project.id">
+            {{ project.label }}
+          </option>
+        </select>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" (click)="createSecret()" [disabled]="loading()">
+        Save
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'provision'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Provision organization</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Organization name</span>
+        <input [(ngModel)]="newOrg.orgName" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Project name</span>
+        <input [(ngModel)]="newOrg.projectName" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Initial secret name</span>
+        <input [(ngModel)]="newOrg.secretName" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Initial secret value</span>
+        <textarea [(ngModel)]="newOrg.secretValue"></textarea>
+      </label>
+      <label class="field">
+        <span>Initial secret notes</span>
+        <textarea [(ngModel)]="newOrg.secretNote"></textarea>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="createSecureOrg()"
+        [disabled]="loading()"
+      >
+        Provision
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'token'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Machine token</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <p class="muted">Copy this token now. It will not be shown again.</p>
+    <div class="token-box">{{ generatedAccessToken() }}</div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" (click)="copyGeneratedToken()">
+        Copy token
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Done</button>
+    </div>
+  </div>
 </div>
