@@ -213,6 +213,8 @@ export class ProductSwitcherService {
         // SM ads are disabled if the user is a regular User (not Admin or Owner)
         // in an organization that has useDisableSMAdsForUsers enabled
         const shouldDisableSMAds = true; // always hide ads for secret manager in Vaultwarden
+        const isSecretsManagerActive =
+          this.router.url === "/sm" || this.router.url.startsWith("/sm/");
 
         const products = {
           pm: {
@@ -224,19 +226,19 @@ export class ProductSwitcherService {
               external: true,
             },
             isActive:
-              !this.router.url.includes("/sm/") &&
+              !isSecretsManagerActive &&
               !this.router.url.includes("/organizations/") &&
               !this.router.url.includes("/providers/"),
           },
           sm: {
             name: "Secrets Manager",
             icon: "bwi-cli",
-            appRoute: ["sm"],
+            appRoute: smOrg?.id ? ["/sm", smOrg.id] : ["/sm"],
             marketingRoute: {
               route: "/sm-landing",
               external: false,
             },
-            isActive: this.router.url.includes("/sm/"),
+            isActive: isSecretsManagerActive,
             otherProductOverrides: {
               supportingText: this.i18nService.t("secureYourInfrastructure"),
             },

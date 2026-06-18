@@ -4,8 +4,8 @@ import { RouterModule, Routes } from "@angular/router";
 import { SmAdminComponent } from "./sm-admin.component";
 
 const routes: Routes = [
-  { path: "", component: SmAdminComponent },
-  { path: ":orgId", component: SmAdminComponent },
+  { path: "", component: SmAdminComponent, pathMatch: "full" },
+  { path: "**", component: SmAdminComponent },
 ];
 
 @NgModule({
