@@ -492,7 +492,6 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    delete (window as any).__BWS_VAULT_JWT__;
     void this.api.clearAdminSession().catch((err) => {
       console.warn("[sm-admin] failed to clear admin session:", err);
     });
@@ -526,8 +525,6 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     } catch (err) {
       console.error("[sm-admin] ensureAdminSession failed:", err);
       return false;
-    } finally {
-      delete (window as any).__BWS_VAULT_JWT__;
     }
   }
 
