@@ -105,3 +105,14 @@ export interface EncryptedProvisionResponse {
   serviceAccountId: string;
   secretCount: number;
 }
+
+export interface DeleteOrganizationResponse {
+  deletedOrganizationId: string;
+  deleted: {
+    organizations: number;
+    accessTokens: number;
+    orgUserKeys: number;
+    secrets: number;
+    projects: number;
+  };
+}

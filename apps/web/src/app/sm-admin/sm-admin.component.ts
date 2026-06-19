@@ -44,7 +44,7 @@ type ActiveSection =
   | "settings"
   | "import"
   | "export";
-type ModalMode = "secret" | "provision" | "token" | null;
+type ModalMode = "secret" | "provision" | "token" | "delete-org" | null;
 
 @Component({
   selector: "app-sm-admin",
@@ -330,6 +330,11 @@ type ModalMode = "secret" | "provision" | "token" | null;
         color: #d5dde8;
       }
 
+      .org-create {
+        margin-top: 8px;
+        color: #d5dde8;
+      }
+
       .nav-separator {
         height: 1px;
         background: var(--sm-sidebar-border);
@@ -431,6 +436,16 @@ type ModalMode = "secret" | "provision" | "token" | null;
       .btn-primary:hover:not(:disabled) {
         background: var(--sm-primary-hover);
         border-color: var(--sm-primary-hover);
+      }
+
+      .btn-danger {
+        background: var(--sm-danger);
+        border-color: var(--sm-danger);
+        color: #ffffff;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        filter: brightness(0.92);
       }
 
       .btn-icon {
@@ -681,6 +696,36 @@ type ModalMode = "secret" | "provision" | "token" | null;
         max-width: 620px;
       }
 
+      .settings-view {
+        max-width: 720px;
+        display: grid;
+        gap: 24px;
+      }
+
+      .settings-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .danger-zone {
+        border-top: 1px solid var(--sm-border);
+        padding-top: 22px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .danger-zone h3 {
+        margin: 0;
+        color: var(--sm-danger);
+        font-size: 15px;
+      }
+
+      .danger-list {
+        margin: 12px 0 0;
+        color: var(--sm-muted);
+      }
+
       .status {
         min-height: 100vh;
         display: grid;
@@ -813,15 +858,19 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     secretNote: "",
   };
 
+  protected readonly deleteOrg = {
+    confirmation: "",
+  };
+
   protected readonly organizations = computed(() => this.state()?.organizations ?? []);
   protected readonly selectedOrg = computed(() => {
     const orgId = this.selectedOrgId();
     return this.organizations().find((org) => org.id === orgId) ?? null;
   });
 
-  private userId: UserId | null = null;
-  private userKey: UserKey | null = null;
-  private bwsOrgKey: SymmetricCryptoKey | null = null;
+  private readonly userId: UserId | null = null;
+  private readonly userKey: UserKey | null = null;
+  private readonly bwsOrgKey: SymmetricCryptoKey | null = null;
 
   constructor(
     private readonly tokenService: TokenService,
@@ -868,6 +917,11 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.selectedOrgId.set(nextOrgId);
     if (nextOrgId) {
       await this.loadSelectedOrg();
+    } else {
+      this.decryptedProjects.set([]);
+      this.decryptedSecrets.set([]);
+      this.bwsOrgKey = null;
+      this.orgKeyStatus.set(null);
     }
   }
 
@@ -907,6 +961,15 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   protected openProvision(): void {
     this.error.set(null);
     this.modalMode.set("provision");
+  }
+
+  protected openDeleteOrganization(): void {
+    if (!this.selectedOrg()) {
+      return;
+    }
+    this.deleteOrg.confirmation = "";
+    this.error.set(null);
+    this.modalMode.set("delete-org");
   }
 
   protected closeModal(): void {
@@ -1020,6 +1083,42 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.newSecret.note = "";
       await this.refreshState();
       this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected deleteOrgLabel(): string {
+    const org = this.selectedOrg();
+    return org ? this.orgLabel(org) : "";
+  }
+
+  protected deleteOrgConfirmationMatches(): boolean {
+    const label = this.deleteOrgLabel();
+    return label.length > 0 && this.deleteOrg.confirmation.trim() === label;
+  }
+
+  protected async deleteSelectedOrganization(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    if (!this.deleteOrgConfirmationMatches()) {
+      this.error.set("Type the organization name exactly to delete it.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.deleteOrganization(org.id);
+      this.modalMode.set(null);
+      this.deleteOrg.confirmation = "";
+      this.activeSection.set("overview");
+      await this.refreshState();
     } catch (error) {
       this.error.set(this.messageFromError(error));
     } finally {

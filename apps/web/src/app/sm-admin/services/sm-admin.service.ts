@@ -7,6 +7,7 @@ import {
   ProvisionResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  DeleteOrganizationResponse,
   EncryptedProvisionRequest,
   EncryptedProvisionResponse,
   OrgUserKeyResponse,
@@ -72,6 +73,10 @@ export class SmAdminService {
     return this.request<OrgUserKeyResponse>("PUT", `/_admin/orgs/${orgId}/key`, {
       encryptedOrgKey,
     });
+  }
+
+  async deleteOrganization(orgId: string): Promise<DeleteOrganizationResponse> {
+    return this.request<DeleteOrganizationResponse>("DELETE", `/_admin/orgs/${orgId}`);
   }
 
   async createProject(orgId: string, req: CreateProjectRequest): Promise<CreateProjectResponse> {

@@ -80,6 +80,11 @@
             <span class="nav-count">{{ org.machineAccounts.length }}</span>
           </button>
         </div>
+
+        <button type="button" class="nav-item org-create" (click)="openProvision()">
+          <span class="nav-icon">+</span>
+          <span>New organization</span>
+        </button>
       </div>
 
       <div class="nav-separator"></div>
@@ -144,7 +149,7 @@
           type="button"
           class="btn btn-primary"
           (click)="openNewSecret()"
-          [disabled]="loading() || !selectedOrg()"
+          [disabled]="loading()"
         >
           + New
         </button>
@@ -238,12 +243,34 @@
           <p class="muted">Trash is empty.</p>
         </section>
 
-        <section *ngSwitchCase="'settings'" class="empty-view">
+        <section *ngSwitchCase="'settings'" class="settings-view">
           <h2>Settings</h2>
           <label class="field">
             <span>Organization ID</span>
             <input [value]="selectedOrg()?.id ?? ''" readonly />
           </label>
+          <div class="settings-actions">
+            <button type="button" class="btn" (click)="openProvision()" [disabled]="loading()">
+              New organization
+            </button>
+          </div>
+          <div class="danger-zone">
+            <h3>Danger zone</h3>
+            <p class="muted">
+              Delete this BWS organization and its BWS projects, secrets, machine accounts, and key
+              envelopes. Vaultwarden organizations and vault entries are not changed.
+            </p>
+            <div>
+              <button
+                type="button"
+                class="btn btn-danger"
+                (click)="openDeleteOrganization()"
+                [disabled]="loading() || !selectedOrg()"
+              >
+                Delete organization
+              </button>
+            </div>
+          </div>
         </section>
 
         <section *ngSwitchCase="'import'" class="empty-view">
@@ -448,6 +475,41 @@
         Copy token
       </button>
       <button type="button" class="btn" (click)="closeModal()">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'delete-org'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Delete organization</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted">
+        BWS organization data for <strong>{{ deleteOrgLabel() }}</strong> will be permanently
+        deleted.
+      </p>
+      <ul class="danger-list">
+        <li>{{ selectedOrg()?.projects?.length ?? 0 }} projects</li>
+        <li>{{ selectedOrg()?.secretCount ?? 0 }} secrets</li>
+        <li>{{ selectedOrg()?.machineAccounts?.length ?? 0 }} machine accounts</li>
+      </ul>
+      <label class="field">
+        <span>Type "{{ deleteOrgLabel() }}" to confirm</span>
+        <input [(ngModel)]="deleteOrg.confirmation" autocomplete="off" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="deleteSelectedOrganization()"
+        [disabled]="loading() || !deleteOrgConfirmationMatches()"
+      >
+        Delete organization
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
     </div>
   </div>
 </div>
