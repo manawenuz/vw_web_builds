@@ -868,9 +868,9 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     return this.organizations().find((org) => org.id === orgId) ?? null;
   });
 
-  private readonly userId: UserId | null = null;
-  private readonly userKey: UserKey | null = null;
-  private readonly bwsOrgKey: SymmetricCryptoKey | null = null;
+  private userId: UserId | null = null;
+  private userKey: UserKey | null = null;
+  private bwsOrgKey: SymmetricCryptoKey | null = null;
 
   constructor(
     private readonly tokenService: TokenService,
