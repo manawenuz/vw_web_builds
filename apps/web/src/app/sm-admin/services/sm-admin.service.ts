@@ -38,11 +38,35 @@ export class SmAdminService {
     });
     console.log(`[sm-admin:api] ${method} ${path} response`, response.status);
     if (!response.ok) {
-      const text = await response.text().catch(() => "Unknown error");
-      throw new Error(`${response.status} ${response.statusText}: ${text}`);
+      throw new Error(await this.responseErrorMessage(response));
     }
     const text = await response.text();
     return (text ? JSON.parse(text) : undefined) as T;
+  }
+
+  private async responseErrorMessage(response: Response): Promise<string> {
+    const text = await response.text().catch(() => "");
+    const trimmed = text.trim();
+    const contentType = response.headers.get("content-type") ?? "";
+    const prefix = `${response.status} ${response.statusText || "Request failed"}`;
+
+    if (contentType.includes("application/json") && trimmed) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        const message = parsed["message"] ?? parsed["error"] ?? parsed["error_description"];
+        if (typeof message === "string" && message.trim()) {
+          return `${prefix}: ${message}`;
+        }
+      } catch {
+        // Fall through to the concise text handling below.
+      }
+    }
+
+    if (/^<(?:!doctype\s+html|html)\b/i.test(trimmed)) {
+      return `${prefix}: Secrets Manager admin endpoint was not found. Check that the Vaultwarden image and BWS sidecar are both updated.`;
+    }
+
+    return trimmed ? `${prefix}: ${trimmed.slice(0, 500)}` : prefix;
   }
 
   async establishAdminSession(accessToken: string): Promise<void> {
