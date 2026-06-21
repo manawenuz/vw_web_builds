@@ -72,6 +72,11 @@ export interface OrgUserKeyResponse {
   revisionDate: string | null;
 }
 
+export interface MachineAccountEnvelopeResponse {
+  clientId: string;
+  encryptedPayload: string;
+}
+
 export interface SecretWriteRequest {
   key: string;
   value: string;

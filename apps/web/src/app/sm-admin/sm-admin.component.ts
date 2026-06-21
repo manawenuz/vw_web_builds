@@ -13,6 +13,7 @@ import { TokenService } from "@bitwarden/common/auth/abstractions/token.service"
 import { getUserId } from "@bitwarden/common/auth/services/account.service";
 import { EncryptService } from "@bitwarden/common/key-management/crypto/abstractions/encrypt.service";
 import { EncString } from "@bitwarden/common/key-management/crypto/models/enc-string";
+import { EncryptionType } from "@bitwarden/common/platform/enums";
 import { SymmetricCryptoKey } from "@bitwarden/common/platform/models/domain/symmetric-crypto-key";
 import { UserKey } from "@bitwarden/common/types/key";
 import { KeyService } from "@bitwarden/key-management";
@@ -61,6 +62,7 @@ type ModalMode =
   | "view-machine"
   | "delete-machine"
   | "delete-machines-bulk"
+  | "relink-org"
   | null;
 
 @Component({
@@ -997,6 +999,10 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   protected readonly decryptedProjects = signal<DecryptedProject[]>([]);
   protected readonly decryptedSecrets = signal<DecryptedSecret[]>([]);
   protected readonly orgKeyStatus = signal<string | null>(null);
+  // True when the org-key envelope can't be unwrapped (typically after a master-key rotation):
+  // surfaces a "Re-link organization" recovery CTA instead of a dead error.
+  protected readonly orgKeyNeedsRelink = signal<boolean>(false);
+  protected readonly relink = { token: "" };
   protected readonly generatedAccessToken = signal<string | null>(null);
   protected readonly activeSection = signal<ActiveSection>("overview");
   protected readonly modalMode = signal<ModalMode>(null);
@@ -1073,12 +1079,18 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   });
 
    
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit/refreshState
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userId: UserId | null = null;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userKey: UserKey | null = null;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned when org key is loaded
   private bwsOrgKey: SymmetricCryptoKey | null = null;
+  // The account asymmetric keypair (SPKI / PKCS#8 DER). The org-key envelope is wrapped under
+  // the PUBLIC key so it survives master-key rotation (unlike the legacy symmetric user-key wrap).
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
+  private userPublicKey: Uint8Array | null = null;
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
+  private userPrivateKey: Uint8Array | null = null;
 
   constructor(
     private readonly tokenService: TokenService,
@@ -1100,6 +1112,11 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       if (!this.userKey) {
         throw new Error("Unlock your vault before opening Secrets Manager.");
       }
+      // Load the account keypair (consistent public+private). The org-key envelope is sealed
+      // under the public key; rotation preserves the keypair, so the envelope survives rotation.
+      const keyPair = await firstValueFrom(this.keyService.userEncryptionKeyPair$(this.userId));
+      this.userPublicKey = (keyPair?.publicKey as Uint8Array | undefined) ?? null;
+      this.userPrivateKey = (keyPair?.privateKey as Uint8Array | undefined) ?? null;
       await this.smAdminService.establishAdminSession(jwt);
       await this.refreshState();
       this.ready.set(true);
@@ -1202,7 +1219,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
 
     try {
       const bwsKey = this.randomSymmetricKey();
-      const encryptedOrgKey = await this.encryptService.wrapSymmetricKey(bwsKey, this.userKey);
+      const encryptedOrgKey = await this.wrapOrgKeyForUser(bwsKey);
       const encryptedProjectName = await this.encryptService.encryptString(
         this.newOrg.projectName.trim(),
         bwsKey,
@@ -1869,6 +1886,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.decryptedSecrets.set([]);
     this.bwsOrgKey = null;
     this.orgKeyStatus.set(null);
+    this.orgKeyNeedsRelink.set(false);
     if (!org || !this.userKey) {
       return;
     }
@@ -1882,10 +1900,18 @@ export class SmAdminComponent implements OnInit, OnDestroy {
         return;
       }
 
-      this.bwsOrgKey = await this.encryptService.unwrapSymmetricKey(
-        new EncString(envelope.encryptedOrgKey),
-        this.userKey,
-      );
+      const encStr = new EncString(envelope.encryptedOrgKey);
+      this.bwsOrgKey = await this.unwrapOrgKeyEnvelope(encStr);
+      // Lazy migration: upgrade legacy symmetric (user-key-wrapped) envelopes to the
+      // rotation-proof asymmetric form on first successful load. Best-effort.
+      if (encStr.encryptionType === EncryptionType.AesCbc256_HmacSha256_B64 && this.userPublicKey) {
+        try {
+          const rewrapped = await this.wrapOrgKeyForUser(this.bwsOrgKey);
+          await this.smAdminService.setOrgUserKey(org.id, this.encStringValue(rewrapped));
+        } catch {
+          /* migration is opportunistic; a failure here does not block decryption */
+        }
+      }
 
       const projects = await Promise.all(
         (org.projects ?? []).map(async (project) => ({
@@ -1915,8 +1941,116 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       );
       this.decryptedSecrets.set(decrypted);
     } catch (error) {
-      this.orgKeyStatus.set(this.messageFromError(error));
+      // Envelope present but unwrap failed — almost always a rotated account key. Offer recovery.
+      this.orgKeyNeedsRelink.set(true);
+      this.orgKeyStatus.set(
+        `${this.messageFromError(error)} — your account key may have changed. Re-link this organization with its access token to restore access.`,
+      );
     }
+  }
+
+  /** Open the "Re-link organization" recovery modal. */
+  protected openRelinkOrg(): void {
+    this.relink.token = "";
+    this.error.set(null);
+    this.modalMode.set("relink-org");
+  }
+
+  /**
+   * Recover web-UI access after a master-key rotation orphaned the org-key envelope.
+   * The pasted access token carries the seed; the server returns that token's wrapped org-key
+   * blob; we unwrap the org key locally, then re-wrap it under the new account public key.
+   */
+  protected async relinkOrg(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    const raw = this.relink.token.trim();
+    if (!raw) {
+      this.error.set("Paste the organization's access token.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      // Access-token format: 0.<clientId>.<clientSecret>:<base64 seed>
+      const body = raw.startsWith("0.") ? raw.slice(2) : raw;
+      const colon = body.indexOf(":");
+      if (colon < 0) {
+        throw new Error("That does not look like a valid access token.");
+      }
+      const clientId = body.slice(0, colon).split(".")[0];
+      const seedB64 = body.slice(colon + 1);
+      if (!clientId || !seedB64) {
+        throw new Error("That does not look like a valid access token.");
+      }
+
+      const envelope = await this.smAdminService.getMachineAccountEnvelope(org.id, clientId);
+      const tokenKey = await this.deriveTokenKey(this.fromB64(seedB64));
+      const payloadJson = await this.encryptService.decryptString(
+        new EncString(envelope.encryptedPayload),
+        tokenKey,
+      );
+      const parsed = JSON.parse(payloadJson) as { encryptionKey?: string };
+      if (!parsed.encryptionKey) {
+        throw new Error("The access token did not yield an organization key.");
+      }
+      const orgKey = new SymmetricCryptoKey(this.fromB64(parsed.encryptionKey));
+
+      const rewrapped = await this.wrapOrgKeyForUser(orgKey);
+      await this.smAdminService.setOrgUserKey(org.id, this.encStringValue(rewrapped));
+
+      this.relink.token = "";
+      this.orgKeyNeedsRelink.set(false);
+      this.modalMode.set(null);
+      await this.loadSelectedOrg();
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Wrap the BWS org key under the account's asymmetric PUBLIC key (rotation-proof). */
+  private async wrapOrgKeyForUser(orgKey: SymmetricCryptoKey): Promise<EncString> {
+    if (!this.userPublicKey) {
+      throw new Error("Your account public key is unavailable; unlock your vault and retry.");
+    }
+    return this.encryptService.encapsulateKeyUnsigned(orgKey, this.userPublicKey);
+  }
+
+  /**
+   * Unwrap the org-key envelope. New envelopes are asymmetric (RSA, sealed under the public
+   * key); legacy envelopes are symmetric (wrapped under the rotatable user key).
+   */
+  private async unwrapOrgKeyEnvelope(envelope: EncString): Promise<SymmetricCryptoKey> {
+    const type = envelope.encryptionType;
+    const isAsymmetric =
+      type === EncryptionType.Rsa2048_OaepSha256_B64 ||
+      type === EncryptionType.Rsa2048_OaepSha1_B64 ||
+      type === EncryptionType.Rsa2048_OaepSha256_HmacSha256_B64 ||
+      type === EncryptionType.Rsa2048_OaepSha1_HmacSha256_B64;
+    if (isAsymmetric) {
+      if (!this.userPrivateKey) {
+        throw new Error("Your account private key is unavailable; unlock your vault and retry.");
+      }
+      return this.encryptService.decapsulateKeyUnsigned(envelope, this.userPrivateKey);
+    }
+    if (!this.userKey) {
+      throw new Error("Unlock your vault before opening Secrets Manager.");
+    }
+    return this.encryptService.unwrapSymmetricKey(envelope, this.userKey);
+  }
+
+  private fromB64(value: string): Uint8Array {
+    const binary = atob(value);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   }
 
   private async decryptLabel(

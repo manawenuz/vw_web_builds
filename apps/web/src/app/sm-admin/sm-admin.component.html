@@ -188,7 +188,18 @@
       </section>
 
       <p class="error" *ngIf="error()">{{ error() }}</p>
-      <div class="callout" *ngIf="orgKeyStatus()">{{ orgKeyStatus() }}</div>
+      <div class="callout" *ngIf="orgKeyStatus()">
+        <div>{{ orgKeyStatus() }}</div>
+        <button
+          type="button"
+          class="btn btn-primary"
+          style="margin-top: 10px"
+          *ngIf="orgKeyNeedsRelink()"
+          (click)="openRelinkOrg()"
+        >
+          Re-link organization
+        </button>
+      </div>
 
       <ng-container [ngSwitch]="activeSection()">
         <section *ngSwitchCase="'overview'" class="section-stack">
@@ -856,6 +867,41 @@
         [disabled]="loading()"
       >
         Create
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Re-link organization (key-rotation recovery) modal -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'relink-org'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Re-link organization</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="font-size: 13px; margin: 0 0 12px">
+        Your account encryption key changed, so this organization's key can no longer be unlocked
+        with your login. Paste one of its machine-account
+        <strong>access tokens</strong> to recover the key and re-seal it under your new account key.
+        Your secrets are unchanged.
+      </p>
+      <label class="field">
+        <span>Access token</span>
+        <input
+          [(ngModel)]="relink.token"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="0.xxxxxxxx-xxxx-…:base64seed"
+        />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" (click)="relinkOrg()" [disabled]="loading()">
+        Re-link
       </button>
       <button type="button" class="btn" (click)="closeModal()">Cancel</button>
     </div>

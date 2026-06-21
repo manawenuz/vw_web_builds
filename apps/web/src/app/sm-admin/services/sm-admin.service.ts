@@ -12,6 +12,7 @@ import {
   DeleteOrganizationResponse,
   EncryptedProvisionRequest,
   EncryptedProvisionResponse,
+  MachineAccountEnvelopeResponse,
   OrgUserKeyResponse,
   SecretResponse,
   SecretWriteRequest,
@@ -101,6 +102,16 @@ export class SmAdminService {
     return this.request<OrgUserKeyResponse>("PUT", `/_admin/orgs/${orgId}/key`, {
       encryptedOrgKey,
     });
+  }
+
+  async getMachineAccountEnvelope(
+    orgId: string,
+    clientId: string,
+  ): Promise<MachineAccountEnvelopeResponse> {
+    return this.request<MachineAccountEnvelopeResponse>(
+      "GET",
+      `/_admin/orgs/${orgId}/machine-accounts/${clientId}/envelope`,
+    );
   }
 
   async deleteOrganization(orgId: string): Promise<DeleteOrganizationResponse> {
