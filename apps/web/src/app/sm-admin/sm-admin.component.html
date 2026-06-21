@@ -156,19 +156,6 @@
           >
             + New <span class="new-menu-caret">&#9660;</span>
           </button>
-          <div
-            class="row-menu"
-            *ngIf="newMenuOpen()"
-            [style.top.px]="newMenuPos()?.top"
-            [style.right.px]="newMenuPos()?.right"
-            role="menu"
-          >
-            <button type="button" (click)="openNewProject()" role="menuitem">New Project</button>
-            <button type="button" (click)="openNewSecret()" role="menuitem">New Secret</button>
-            <button type="button" (click)="openNewMachineAccount()" role="menuitem">
-              New Machine account
-            </button>
-          </div>
         </div>
         <button
           type="button"
@@ -563,6 +550,21 @@
 
 <div class="row-menu-overlay" *ngIf="rowMenu()" (click)="rowMenu.set(null)"></div>
 <div class="row-menu-overlay" *ngIf="newMenuOpen()" (click)="closeNewMenu()"></div>
+<!-- + New dropdown lives at the template root (not inside .content-actions, whose
+     pointer-events:none + sticky z-index:20 context would swallow the menu clicks). -->
+<div
+  class="row-menu"
+  *ngIf="newMenuOpen()"
+  [style.top.px]="newMenuPos()?.top"
+  [style.right.px]="newMenuPos()?.right"
+  role="menu"
+>
+  <button type="button" (click)="openNewProject()" role="menuitem">New Project</button>
+  <button type="button" (click)="openNewSecret()" role="menuitem">New Secret</button>
+  <button type="button" (click)="openNewMachineAccount()" role="menuitem">
+    New Machine account
+  </button>
+</div>
 
 <div class="modal-backdrop" *ngIf="modalMode() === 'edit-secret'" role="dialog" aria-modal="true">
   <div class="modal-card">
