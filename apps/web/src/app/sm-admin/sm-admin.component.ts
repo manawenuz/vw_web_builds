@@ -624,9 +624,11 @@ type ModalMode =
       }
 
       .row-menu {
-        position: absolute;
-        right: 8px;
-        top: calc(100% - 2px);
+        /* position:fixed + inline top/right (from the trigger's rect) so the dropdown
+           escapes the .data-table-wrap and :host overflow:auto clipping that hid it for
+           the last/only row. No transformed ancestor exists, so fixed anchors to the
+           viewport. */
+        position: fixed;
         z-index: 30;
         display: flex;
         flex-direction: column;
@@ -895,6 +897,10 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   protected readonly activeSection = signal<ActiveSection>("overview");
   protected readonly modalMode = signal<ModalMode>(null);
   protected readonly rowMenu = signal<{ kind: "secret" | "project"; id: string } | null>(null);
+  // Viewport coords for the fixed-position row menu, captured from the trigger button so
+  // the dropdown escapes the .data-table-wrap / :host `overflow:auto` clipping that hid it
+  // for the last/only row (see toggleRowMenu).
+  protected readonly rowMenuPos = signal<{ top: number; right: number } | null>(null);
 
   protected readonly newSecret = {
     name: "",
@@ -1157,9 +1163,23 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected toggleRowMenu(kind: "secret" | "project", id: string): void {
+  protected toggleRowMenu(kind: "secret" | "project", id: string, ev?: Event): void {
     const current = this.rowMenu();
-    this.rowMenu.set(current && current.kind === kind && current.id === id ? null : { kind, id });
+    const opening = !(current && current.kind === kind && current.id === id);
+    if (opening && ev?.currentTarget instanceof HTMLElement) {
+      // Anchor the menu just under the trigger in VIEWPORT coords. The menu is
+      // position:fixed, so it is not clipped by the table wrapper's / host's overflow
+      // (which was swallowing the dropdown for the last/only row).
+      const r = ev.currentTarget.getBoundingClientRect();
+      this.rowMenuPos.set({
+        top: Math.round(r.bottom + 4),
+        right: Math.round(window.innerWidth - r.right),
+      });
+    }
+    this.rowMenu.set(opening ? { kind, id } : null);
+    if (!opening) {
+      this.rowMenuPos.set(null);
+    }
   }
 
   protected isRowMenuOpen(kind: "secret" | "project", id: string): boolean {

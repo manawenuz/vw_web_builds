@@ -330,11 +330,11 @@
                 type="button"
                 class="row-options"
                 aria-label="Project options"
-                (click)="toggleRowMenu('project', project.id)"
+                (click)="toggleRowMenu('project', project.id, $event)"
               >
                 ...
               </button>
-              <div class="row-menu" *ngIf="isRowMenuOpen('project', project.id)">
+              <div class="row-menu" *ngIf="isRowMenuOpen('project', project.id)" [style.top.px]="rowMenuPos()?.top" [style.right.px]="rowMenuPos()?.right">
                 <button type="button" class="danger" (click)="askDeleteProject(project)">
                   Delete
                 </button>
@@ -386,11 +386,11 @@
                 type="button"
                 class="row-options"
                 aria-label="Secret options"
-                (click)="toggleRowMenu('secret', secret.id)"
+                (click)="toggleRowMenu('secret', secret.id, $event)"
               >
                 ...
               </button>
-              <div class="row-menu" *ngIf="isRowMenuOpen('secret', secret.id)">
+              <div class="row-menu" *ngIf="isRowMenuOpen('secret', secret.id)" [style.top.px]="rowMenuPos()?.top" [style.right.px]="rowMenuPos()?.right">
                 <button type="button" (click)="startEditSecret(secret)">Edit</button>
                 <button type="button" class="danger" (click)="askDeleteSecret(secret)">
                   Delete
