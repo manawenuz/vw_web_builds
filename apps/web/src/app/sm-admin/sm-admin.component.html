@@ -326,7 +326,19 @@
             </td>
             <td class="muted">{{ project.creationDate | date: "medium" }}</td>
             <td class="options-cell">
-              <button type="button" class="row-options" aria-label="Project options">...</button>
+              <button
+                type="button"
+                class="row-options"
+                aria-label="Project options"
+                (click)="toggleRowMenu('project', project.id)"
+              >
+                ...
+              </button>
+              <div class="row-menu" *ngIf="isRowMenuOpen('project', project.id)">
+                <button type="button" class="danger" (click)="askDeleteProject(project)">
+                  Delete
+                </button>
+              </div>
             </td>
           </tr>
           <tr *ngIf="visibleProjects(preview).length === 0">
@@ -370,7 +382,20 @@
             <td>{{ secret.projectLabel }}</td>
             <td class="muted">{{ secret.revisionDate | date: "medium" }}</td>
             <td class="options-cell">
-              <button type="button" class="row-options" aria-label="Secret options">...</button>
+              <button
+                type="button"
+                class="row-options"
+                aria-label="Secret options"
+                (click)="toggleRowMenu('secret', secret.id)"
+              >
+                ...
+              </button>
+              <div class="row-menu" *ngIf="isRowMenuOpen('secret', secret.id)">
+                <button type="button" (click)="startEditSecret(secret)">Edit</button>
+                <button type="button" class="danger" (click)="askDeleteSecret(secret)">
+                  Delete
+                </button>
+              </div>
             </td>
           </tr>
           <tr *ngIf="visibleSecrets(preview).length === 0">
@@ -414,6 +439,108 @@
     <div class="modal-actions">
       <button type="button" class="btn btn-primary" (click)="createSecret()" [disabled]="loading()">
         Save
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="row-menu-overlay" *ngIf="rowMenu()" (click)="rowMenu.set(null)"></div>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'edit-secret'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Edit secret</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Name <small>(required)</small></span>
+        <input [(ngModel)]="editSecret.name" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Value</span>
+        <textarea [(ngModel)]="editSecret.value"></textarea>
+      </label>
+      <label class="field">
+        <span>Notes</span>
+        <textarea [(ngModel)]="editSecret.note"></textarea>
+      </label>
+      <label class="field">
+        <span>Project</span>
+        <select [(ngModel)]="editSecret.projectId">
+          <option value="">Unassigned</option>
+          <option *ngFor="let project of projectOptions()" [value]="project.id">
+            {{ project.label }}
+          </option>
+        </select>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveEditSecret()"
+        [disabled]="loading()"
+      >
+        Save
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="modalMode() === 'delete-secret'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Delete secret</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Delete <strong>{{ pendingDeleteSecret()?.label }}</strong
+        >? This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="confirmDeleteSecret()"
+        [disabled]="loading()"
+      >
+        Delete
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal-backdrop"
+  *ngIf="modalMode() === 'delete-project'"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Delete project</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Delete project <strong>{{ pendingDeleteProject()?.label }}</strong
+        >? This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="confirmDeleteProject()"
+        [disabled]="loading()"
+      >
+        Delete
       </button>
       <button type="button" class="btn" (click)="closeModal()">Cancel</button>
     </div>

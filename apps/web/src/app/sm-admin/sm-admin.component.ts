@@ -44,7 +44,15 @@ type ActiveSection =
   | "settings"
   | "import"
   | "export";
-type ModalMode = "secret" | "provision" | "token" | "delete-org" | null;
+type ModalMode =
+  | "secret"
+  | "edit-secret"
+  | "delete-secret"
+  | "delete-project"
+  | "provision"
+  | "token"
+  | "delete-org"
+  | null;
 
 @Component({
   selector: "app-sm-admin",
@@ -611,6 +619,50 @@ type ModalMode = "secret" | "provision" | "token" | "delete-org" | null;
         color: var(--sm-text);
       }
 
+      .options-cell {
+        position: relative;
+      }
+
+      .row-menu {
+        position: absolute;
+        right: 8px;
+        top: calc(100% - 2px);
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        min-width: 132px;
+        background: var(--sm-surface, #0f1f3d);
+        border: 1px solid var(--sm-border, #2b3b5e);
+        border-radius: 8px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+        overflow: hidden;
+      }
+
+      .row-menu button {
+        background: transparent;
+        border: 0;
+        color: var(--sm-text, #e8eefc);
+        text-align: left;
+        padding: 9px 14px;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      .row-menu button:hover {
+        background: var(--sm-surface-hover);
+      }
+
+      .row-menu button.danger {
+        color: #ff8a8a;
+      }
+
+      .row-menu-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: transparent;
+      }
+
       .badge {
         display: inline-flex;
         align-items: center;
@@ -842,6 +894,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   protected readonly generatedAccessToken = signal<string | null>(null);
   protected readonly activeSection = signal<ActiveSection>("overview");
   protected readonly modalMode = signal<ModalMode>(null);
+  protected readonly rowMenu = signal<{ kind: "secret" | "project"; id: string } | null>(null);
 
   protected readonly newSecret = {
     name: "",
@@ -862,14 +915,28 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     confirmation: "",
   };
 
+  protected readonly editSecret = {
+    id: "",
+    name: "",
+    value: "",
+    note: "",
+    projectId: "",
+  };
+
+  protected readonly pendingDeleteSecret = signal<DecryptedSecret | null>(null);
+  protected readonly pendingDeleteProject = signal<DecryptedProject | null>(null);
+
   protected readonly organizations = computed(() => this.state()?.organizations ?? []);
   protected readonly selectedOrg = computed(() => {
     const orgId = this.selectedOrgId();
     return this.organizations().find((org) => org.id === orgId) ?? null;
   });
 
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userId: UserId | null = null;
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userKey: UserKey | null = null;
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in loadSelectedOrg
   private bwsOrgKey: SymmetricCryptoKey | null = null;
 
   constructor(
@@ -1081,6 +1148,121 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.newSecret.name = "";
       this.newSecret.value = "";
       this.newSecret.note = "";
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected toggleRowMenu(kind: "secret" | "project", id: string): void {
+    const current = this.rowMenu();
+    this.rowMenu.set(current && current.kind === kind && current.id === id ? null : { kind, id });
+  }
+
+  protected isRowMenuOpen(kind: "secret" | "project", id: string): boolean {
+    const current = this.rowMenu();
+    return !!current && current.kind === kind && current.id === id;
+  }
+
+  protected startEditSecret(secret: DecryptedSecret): void {
+    this.rowMenu.set(null);
+    this.error.set(null);
+    this.editSecret.id = secret.id;
+    this.editSecret.name = secret.label;
+    this.editSecret.value = secret.secretValue;
+    this.editSecret.note = secret.noteText;
+    this.editSecret.projectId = secret.projectId ?? "";
+    this.modalMode.set("edit-secret");
+  }
+
+  protected async saveEditSecret(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org || !this.bwsOrgKey) {
+      this.error.set("This organization does not have a decryptable BWS key envelope.");
+      return;
+    }
+    if (!this.editSecret.name.trim()) {
+      this.error.set("Secret name is required.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.updateSecret(org.id, this.editSecret.id, {
+        key: this.encStringValue(
+          await this.encryptService.encryptString(this.editSecret.name.trim(), this.bwsOrgKey),
+        ),
+        value: this.encStringValue(
+          await this.encryptService.encryptString(this.editSecret.value, this.bwsOrgKey),
+        ),
+        note: this.encStringValue(
+          await this.encryptService.encryptString(this.editSecret.note, this.bwsOrgKey),
+        ),
+        projectIds: this.editSecret.projectId ? [this.editSecret.projectId] : [],
+      });
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected askDeleteSecret(secret: DecryptedSecret): void {
+    this.rowMenu.set(null);
+    this.error.set(null);
+    this.pendingDeleteSecret.set(secret);
+    this.modalMode.set("delete-secret");
+  }
+
+  protected async confirmDeleteSecret(): Promise<void> {
+    const org = this.selectedOrg();
+    const secret = this.pendingDeleteSecret();
+    if (!org || !secret) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.deleteSecrets(org.id, [secret.id]);
+      this.pendingDeleteSecret.set(null);
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected askDeleteProject(project: DecryptedProject): void {
+    this.rowMenu.set(null);
+    this.error.set(null);
+    this.pendingDeleteProject.set(project);
+    this.modalMode.set("delete-project");
+  }
+
+  protected async confirmDeleteProject(): Promise<void> {
+    const org = this.selectedOrg();
+    const project = this.pendingDeleteProject();
+    if (!org || !project) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.deleteProject(org.id, project.id);
+      this.pendingDeleteProject.set(null);
       await this.refreshState();
       this.modalMode.set(null);
     } catch (error) {
