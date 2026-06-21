@@ -145,14 +145,31 @@
 
     <main class="main">
       <div class="content-actions">
-        <button
-          type="button"
-          class="btn btn-primary"
-          (click)="openNewSecret()"
-          [disabled]="loading()"
-        >
-          + New
-        </button>
+        <div class="new-menu-wrap">
+          <button
+            type="button"
+            class="btn btn-primary"
+            (click)="toggleNewMenu($event)"
+            [disabled]="loading()"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="newMenuOpen()"
+          >
+            + New <span class="new-menu-caret">&#9660;</span>
+          </button>
+          <div
+            class="row-menu"
+            *ngIf="newMenuOpen()"
+            [style.top.px]="newMenuPos()?.top"
+            [style.right.px]="newMenuPos()?.right"
+            role="menu"
+          >
+            <button type="button" (click)="openNewProject()" role="menuitem">New Project</button>
+            <button type="button" (click)="openNewSecret()" role="menuitem">New Secret</button>
+            <button type="button" (click)="openNewMachineAccount()" role="menuitem">
+              New Machine account
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           class="btn btn-icon"
@@ -161,7 +178,7 @@
           aria-label="Refresh"
           title="Refresh"
         >
-          ↻
+          &#8635;
         </button>
       </div>
 
@@ -198,18 +215,44 @@
         <section *ngSwitchCase="'machine-accounts'" class="section-block">
           <div class="section-title-row">
             <h2>Machine accounts</h2>
+            <button
+              *ngIf="selectedMachineCount() > 0"
+              type="button"
+              class="btn btn-danger bulk-delete-btn"
+              (click)="openDeleteMachinesBulk()"
+              [disabled]="loading()"
+            >
+              Delete machine accounts ({{ selectedMachineCount() }})
+            </button>
           </div>
           <div class="data-table-wrap">
             <table class="data-table">
               <thead>
                 <tr>
+                  <th class="checkbox-cell">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all machine accounts"
+                      [checked]="allMachinesSelected()"
+                      (change)="toggleAllMachines()"
+                    />
+                  </th>
                   <th>Name</th>
                   <th>Access</th>
                   <th>Client ID</th>
+                  <th class="options-cell"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr *ngFor="let account of selectedOrg()?.machineAccounts ?? []">
+                  <td class="checkbox-cell">
+                    <input
+                      type="checkbox"
+                      aria-label="Select machine account"
+                      [checked]="isMachineSelected(account.clientId)"
+                      (change)="toggleMachineSelection(account.clientId)"
+                    />
+                  </td>
                   <td>
                     <span class="item-link">Machine account</span>
                     <div class="muted mono">{{ account.serviceAccountId }}</div>
@@ -224,9 +267,32 @@
                     </span>
                   </td>
                   <td class="mono muted">{{ account.clientId }}</td>
+                  <td class="options-cell">
+                    <button
+                      type="button"
+                      class="row-options"
+                      aria-label="Machine account options"
+                      (click)="toggleRowMenu('machine', account.clientId, $event)"
+                    >
+                      ...
+                    </button>
+                    <div
+                      class="row-menu"
+                      *ngIf="isRowMenuOpen('machine', account.clientId)"
+                      [style.top.px]="rowMenuPos()?.top"
+                      [style.right.px]="rowMenuPos()?.right"
+                    >
+                      <button type="button" (click)="openViewMachine(account)">
+                        View machine account
+                      </button>
+                      <button type="button" class="danger" (click)="askDeleteMachine(account)">
+                        Delete machine account
+                      </button>
+                    </div>
+                  </td>
                 </tr>
                 <tr *ngIf="(selectedOrg()?.machineAccounts?.length ?? 0) === 0">
-                  <td colspan="3" class="empty-cell">No machine accounts.</td>
+                  <td colspan="5" class="empty-cell">No machine accounts.</td>
                 </tr>
               </tbody>
             </table>
@@ -334,7 +400,14 @@
               >
                 ...
               </button>
-              <div class="row-menu" *ngIf="isRowMenuOpen('project', project.id)" [style.top.px]="rowMenuPos()?.top" [style.right.px]="rowMenuPos()?.right">
+              <div
+                class="row-menu"
+                *ngIf="isRowMenuOpen('project', project.id)"
+                [style.top.px]="rowMenuPos()?.top"
+                [style.right.px]="rowMenuPos()?.right"
+              >
+                <button type="button" (click)="openViewProject(project)">View project</button>
+                <button type="button" (click)="startEditProject(project)">Edit project</button>
                 <button type="button" class="danger" (click)="askDeleteProject(project)">
                   Delete
                 </button>
@@ -353,10 +426,18 @@
 <ng-template #secretsSection let-preview="preview">
   <section class="section-block">
     <div class="section-title-row">
-      <button type="button" class="section-toggle" aria-label="Secrets expanded">▾</button>
+      <button type="button" class="section-toggle" aria-label="Secrets expanded">&#9662;</button>
       <h2>Secrets</h2>
       <button *ngIf="preview" type="button" class="link-button" (click)="setSection('secrets')">
         View all
+      </button>
+    </div>
+
+    <!-- Bulk action bar: only shown when at least 1 secret is selected -->
+    <div class="bulk-action-bar" *ngIf="selectedSecretIds().size > 0">
+      <span class="bulk-count">{{ selectedSecretIds().size }} selected</span>
+      <button type="button" class="btn btn-danger bulk-delete-btn" (click)="askBulkDeleteSecrets()">
+        Delete secrets
       </button>
     </div>
 
@@ -364,7 +445,14 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th class="checkbox-cell"><input type="checkbox" aria-label="Select all secrets" /></th>
+            <th class="checkbox-cell">
+              <input
+                type="checkbox"
+                aria-label="Select all secrets"
+                [checked]="allSecretsSelected(preview)"
+                (change)="toggleSelectAllSecrets(preview)"
+              />
+            </th>
             <th>Name</th>
             <th>Project</th>
             <th>Last edited</th>
@@ -372,8 +460,18 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let secret of visibleSecrets(preview)">
-            <td><input type="checkbox" aria-label="Select secret" /></td>
+          <tr
+            *ngFor="let secret of visibleSecrets(preview)"
+            [class.row-selected]="isSecretSelected(secret.id)"
+          >
+            <td class="checkbox-cell">
+              <input
+                type="checkbox"
+                aria-label="Select secret"
+                [checked]="isSecretSelected(secret.id)"
+                (change)="toggleSecretSelection(secret.id)"
+              />
+            </td>
             <td>
               <span class="key-icon" aria-hidden="true"></span>
               <span class="item-link">{{ secret.label }}</span>
@@ -390,8 +488,15 @@
               >
                 ...
               </button>
-              <div class="row-menu" *ngIf="isRowMenuOpen('secret', secret.id)" [style.top.px]="rowMenuPos()?.top" [style.right.px]="rowMenuPos()?.right">
+              <div
+                class="row-menu"
+                *ngIf="isRowMenuOpen('secret', secret.id)"
+                [style.top.px]="rowMenuPos()?.top"
+                [style.right.px]="rowMenuPos()?.right"
+              >
                 <button type="button" (click)="startEditSecret(secret)">Edit</button>
+                <button type="button" (click)="copySecretName(secret)">Copy secret name</button>
+                <button type="button" (click)="copySecretValue(secret)">Copy secret value</button>
                 <button type="button" class="danger" (click)="askDeleteSecret(secret)">
                   Delete
                 </button>
@@ -446,6 +551,7 @@
 </div>
 
 <div class="row-menu-overlay" *ngIf="rowMenu()" (click)="rowMenu.set(null)"></div>
+<div class="row-menu-overlay" *ngIf="newMenuOpen()" (click)="closeNewMenu()"></div>
 
 <div class="modal-backdrop" *ngIf="modalMode() === 'edit-secret'" role="dialog" aria-modal="true">
   <div class="modal-card">
@@ -507,6 +613,42 @@
         type="button"
         class="btn btn-danger"
         (click)="confirmDeleteSecret()"
+        [disabled]="loading()"
+      >
+        Delete
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div
+  class="modal-backdrop"
+  *ngIf="modalMode() === 'delete-secrets-bulk'"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>
+        Delete {{ selectedSecretIds().size }} secret{{ selectedSecretIds().size === 1 ? "" : "s" }}
+      </h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Are you sure you want to permanently delete
+        {{ selectedSecretIds().size }} secret{{ selectedSecretIds().size === 1 ? "" : "s" }}? This
+        action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="confirmBulkDeleteSecrets()"
         [disabled]="loading()"
       >
         Delete
@@ -610,7 +752,9 @@
   <div class="modal-card">
     <div class="modal-header">
       <h2>Delete organization</h2>
-      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
     </div>
     <div class="modal-body">
       <p class="muted">
@@ -635,6 +779,283 @@
         [disabled]="loading() || !deleteOrgConfirmationMatches()"
       >
         Delete organization
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Project modal -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'new-project'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>New project</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Project name <small>(required)</small></span>
+        <input [(ngModel)]="newProject.name" autocomplete="off" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="createProject()"
+        [disabled]="loading()"
+      >
+        Create
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Machine Account modal -->
+<div
+  class="modal-backdrop"
+  *ngIf="modalMode() === 'new-machine-account'"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>New machine account</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Name <small>(optional label)</small></span>
+        <input
+          [(ngModel)]="newMachineAccount.name"
+          autocomplete="off"
+          placeholder="e.g. deploy-bot"
+        />
+      </label>
+      <label class="field">
+        <span>Access</span>
+        <select [(ngModel)]="newMachineAccount.write">
+          <option [ngValue]="true">Can read, write</option>
+          <option [ngValue]="false">Can read only</option>
+        </select>
+      </label>
+      <p class="muted" style="font-size: 13px; margin: 0">
+        A new access token will be generated and shown once after creation.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="createMachineAccount()"
+        [disabled]="loading()"
+      >
+        Create
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- View project modal -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'view-project'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>{{ viewProject()?.label }}</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="viewProject() as proj">
+      <div class="field">
+        <span>Project name</span>
+        <input [value]="proj.label" readonly />
+      </div>
+      <div class="field">
+        <span>Project ID</span>
+        <input class="mono" [value]="proj.id" readonly />
+      </div>
+      <div class="field">
+        <span>Created</span>
+        <input [value]="proj.creationDate | date: 'medium'" readonly />
+      </div>
+      <div class="field">
+        <span>Secrets in this project ({{ projectSecrets(proj.id).length }})</span>
+        <div
+          class="view-project-secrets"
+          *ngIf="projectSecrets(proj.id).length > 0; else noSecrets"
+        >
+          <div class="view-secret-row" *ngFor="let s of projectSecrets(proj.id)">
+            <span class="key-icon" aria-hidden="true"></span>
+            <span class="item-link">{{ s.label }}</span>
+            <span class="muted mono view-secret-id">{{ s.id }}</span>
+          </div>
+        </div>
+        <ng-template #noSecrets>
+          <p class="muted">No secrets assigned to this project.</p>
+        </ng-template>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" (click)="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit project modal -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'edit-project'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Edit project</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span>Project name <small>(required)</small></span>
+        <input [(ngModel)]="editProject.name" autocomplete="off" />
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        (click)="saveEditProject()"
+        [disabled]="loading()"
+      >
+        Save
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- View machine account modal -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'view-machine'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Machine account</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body" *ngIf="viewingMachine() as machine">
+      <label class="field">
+        <span>Client ID</span>
+        <input [value]="machine.clientId" readonly />
+      </label>
+      <label class="field">
+        <span>Service Account ID</span>
+        <input [value]="machine.serviceAccountId" readonly />
+      </label>
+      <label class="field">
+        <span>Access level</span>
+        <input [value]="machine.write ? 'Can read, write' : 'Can read'" readonly />
+      </label>
+      <label class="field">
+        <span>Organization ID</span>
+        <input [value]="selectedOrg()?.id ?? ''" readonly />
+      </label>
+      <label class="field">
+        <span>Identity server URL</span>
+        <input [value]="machineIdentityUrl()" readonly />
+      </label>
+      <label class="field">
+        <span>API server URL</span>
+        <input [value]="machineApiUrl()" readonly />
+      </label>
+      <div *ngIf="(selectedOrg()?.projects?.length ?? 0) > 0">
+        <label class="field">
+          <span>Projects in this organization</span>
+        </label>
+        <div class="machine-project-row" *ngFor="let project of selectedOrg()?.projects ?? []">
+          <span class="muted mono">{{ project.id }}</span>
+          <span class="machine-project-name">{{ project.displayName || project.id }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn" (click)="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete single machine account modal -->
+<div
+  class="modal-backdrop"
+  *ngIf="modalMode() === 'delete-machine'"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Delete machine account</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Delete machine account
+        <strong class="mono">{{ pendingDeleteMachine()?.clientId }}</strong
+        >? This will revoke its access token. This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="confirmDeleteMachine()"
+        [disabled]="loading()"
+      >
+        Delete
+      </button>
+      <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk delete machine accounts modal -->
+<div
+  class="modal-backdrop"
+  *ngIf="modalMode() === 'delete-machines-bulk'"
+  role="dialog"
+  aria-modal="true"
+>
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Delete machine accounts</h2>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Delete {{ pendingDeleteMachinesBulk().length }} machine account<ng-container
+          *ngIf="pendingDeleteMachinesBulk().length !== 1"
+          >s</ng-container
+        >? Their access tokens will be revoked. This action cannot be undone.
+      </p>
+      <div class="machine-bulk-list">
+        <div class="muted mono" *ngFor="let account of pendingDeleteMachinesBulk()">
+          {{ account.clientId }}
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button
+        type="button"
+        class="btn btn-danger"
+        (click)="confirmDeleteMachinesBulk()"
+        [disabled]="loading()"
+      >
+        Delete
       </button>
       <button type="button" class="btn" (click)="closeModal()">Cancel</button>
     </div>

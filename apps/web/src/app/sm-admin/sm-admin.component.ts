@@ -20,6 +20,7 @@ import { UserId } from "@bitwarden/user-core";
 
 import {
   AdminState,
+  MachineAccount,
   OrganizationState,
   ProjectState,
   SecretEntry,
@@ -48,10 +49,18 @@ type ModalMode =
   | "secret"
   | "edit-secret"
   | "delete-secret"
+  | "delete-secrets-bulk"
   | "delete-project"
+  | "view-project"
+  | "edit-project"
   | "provision"
   | "token"
   | "delete-org"
+  | "new-project"
+  | "new-machine-account"
+  | "view-machine"
+  | "delete-machine"
+  | "delete-machines-bulk"
   | null;
 
 @Component({
@@ -881,6 +890,101 @@ type ModalMode =
           padding-right: 0;
         }
       }
+
+      /* Wrapper so the fixed-positioned dropdown does not shift the flex row */
+      .new-menu-wrap {
+        position: relative;
+        display: flex;
+      }
+
+      /* Small caret inside the + New button */
+      .new-menu-caret {
+        font-size: 11px;
+        margin-left: 5px;
+        vertical-align: 1px;
+      }
+
+      .bulk-action-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        padding: 8px 12px;
+        background: var(--sm-primary-soft);
+        border: 1px solid var(--sm-border);
+        border-radius: 6px;
+      }
+
+      .bulk-count {
+        font-weight: 600;
+        color: var(--sm-text);
+        font-size: 14px;
+      }
+
+      .bulk-delete-btn {
+        margin-left: auto;
+        font-size: 13px;
+        min-height: 34px;
+        padding: 5px 12px;
+      }
+
+      .row-selected td {
+        background: var(--sm-primary-soft);
+      }
+
+      .data-table tbody .row-selected:hover td {
+        background: color-mix(in srgb, var(--sm-primary-soft) 80%, var(--sm-surface-hover) 20%);
+      }
+
+      /* View-project modal: secrets list */
+      .view-project-secrets {
+        border: 1px solid var(--sm-border);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+
+      .view-secret-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--sm-border);
+      }
+
+      .view-secret-row:last-child {
+        border-bottom: 0;
+      }
+
+      .view-secret-id {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--sm-subtle);
+      }
+
+      .machine-project-row {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--sm-border);
+        font-size: 13px;
+      }
+
+      .machine-project-row:last-child {
+        border-bottom: 0;
+      }
+
+      .machine-project-name {
+        font-weight: 600;
+        color: var(--sm-text);
+      }
+
+      .machine-bulk-list {
+        margin-top: 10px;
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+      }
     `,
   ],
 })
@@ -896,11 +1000,35 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   protected readonly generatedAccessToken = signal<string | null>(null);
   protected readonly activeSection = signal<ActiveSection>("overview");
   protected readonly modalMode = signal<ModalMode>(null);
-  protected readonly rowMenu = signal<{ kind: "secret" | "project"; id: string } | null>(null);
+  protected readonly rowMenu = signal<{
+    kind: "secret" | "project" | "machine";
+    id: string;
+  } | null>(null);
   // Viewport coords for the fixed-position row menu, captured from the trigger button so
-  // the dropdown escapes the .data-table-wrap / :host `overflow:auto` clipping that hid it
+  // the dropdown escapes the .data-table-wrap / :host overflow:auto clipping that hid it
   // for the last/only row (see toggleRowMenu).
   protected readonly rowMenuPos = signal<{ top: number; right: number } | null>(null);
+
+  // Tracks whether the "+ New" dropdown is open.
+  protected readonly newMenuOpen = signal(false);
+  // Viewport coords for the "+ New" dropdown (same fixed-positioning pattern as rowMenuPos).
+  protected readonly newMenuPos = signal<{ top: number; right: number } | null>(null);
+
+  // Form state for New Project modal.
+  protected readonly newProject = { name: "" };
+
+  // Form state for New Machine Account modal.
+  protected readonly newMachineAccount = { name: "", write: true };
+
+  // Secret bulk-select state.
+  protected readonly selectedSecretIds = signal<Set<string>>(new Set());
+  protected readonly bulkDeletePending = signal(false);
+
+  // Machine account view/delete state.
+  protected readonly viewingMachine = signal<MachineAccount | null>(null);
+  protected readonly pendingDeleteMachine = signal<MachineAccount | null>(null);
+  protected readonly pendingDeleteMachinesBulk = signal<MachineAccount[]>([]);
+  protected readonly selectedMachineIds = signal<Set<string>>(new Set());
 
   protected readonly newSecret = {
     name: "",
@@ -929,8 +1057,14 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     projectId: "",
   };
 
+  protected readonly editProject = {
+    id: "",
+    name: "",
+  };
+
   protected readonly pendingDeleteSecret = signal<DecryptedSecret | null>(null);
   protected readonly pendingDeleteProject = signal<DecryptedProject | null>(null);
+  protected readonly viewProject = signal<DecryptedProject | null>(null);
 
   protected readonly organizations = computed(() => this.state()?.organizations ?? []);
   protected readonly selectedOrg = computed(() => {
@@ -938,11 +1072,12 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     return this.organizations().find((org) => org.id === orgId) ?? null;
   });
 
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
+   
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit/refreshState
   private userId: UserId | null = null;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userKey: UserKey | null = null;
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in loadSelectedOrg
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned when org key is loaded
   private bwsOrgKey: SymmetricCryptoKey | null = null;
 
   constructor(
@@ -999,6 +1134,8 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   }
 
   protected async selectOrg(org: OrganizationState): Promise<void> {
+    this.selectedSecretIds.set(new Set());
+    this.selectedMachineIds.set(new Set());
     this.selectedOrgId.set(org.id);
     this.activeSection.set("overview");
     await this.loadSelectedOrg();
@@ -1163,7 +1300,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected toggleRowMenu(kind: "secret" | "project", id: string, ev?: Event): void {
+  protected toggleRowMenu(kind: "secret" | "project" | "machine", id: string, ev?: Event): void {
     const current = this.rowMenu();
     const opening = !(current && current.kind === kind && current.id === id);
     if (opening && ev?.currentTarget instanceof HTMLElement) {
@@ -1182,7 +1319,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected isRowMenuOpen(kind: "secret" | "project", id: string): boolean {
+  protected isRowMenuOpen(kind: "secret" | "project" | "machine", id: string): boolean {
     const current = this.rowMenu();
     return !!current && current.kind === kind && current.id === id;
   }
@@ -1333,6 +1470,382 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     if (token) {
       await navigator.clipboard.writeText(token);
     }
+  }
+
+  /** Toggle the "+ New" dropdown anchored to the trigger button in viewport coords. */
+  protected toggleNewMenu(ev: MouseEvent): void {
+    const open = !this.newMenuOpen();
+    if (open && ev.currentTarget instanceof HTMLElement) {
+      const r = ev.currentTarget.getBoundingClientRect();
+      this.newMenuPos.set({
+        top: Math.round(r.bottom + 4),
+        right: Math.round(window.innerWidth - r.right),
+      });
+    } else {
+      this.newMenuPos.set(null);
+    }
+    this.newMenuOpen.set(open);
+  }
+
+  /** Close the "+ New" dropdown (called from the overlay click). */
+  protected closeNewMenu(): void {
+    this.newMenuOpen.set(false);
+    this.newMenuPos.set(null);
+  }
+
+  /** Open the New Project modal from the dropdown. */
+  protected openNewProject(): void {
+    this.closeNewMenu();
+    if (!this.selectedOrg()) {
+      this.openProvision();
+      return;
+    }
+    if (this.orgKeyStatus()) {
+      this.error.set(this.orgKeyStatus());
+      return;
+    }
+    this.newProject.name = "";
+    this.error.set(null);
+    this.modalMode.set("new-project");
+  }
+
+  /** Create a project: encrypt name with bwsOrgKey, POST to /_admin/orgs/<id>/projects. */
+  protected async createProject(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org || !this.bwsOrgKey) {
+      this.error.set("This organization does not have a decryptable BWS key envelope.");
+      return;
+    }
+    if (!this.newProject.name.trim()) {
+      this.error.set("Project name is required.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      const encryptedName = await this.encryptService.encryptString(
+        this.newProject.name.trim(),
+        this.bwsOrgKey,
+      );
+      await this.smAdminService.createProject(org.id, {
+        name: this.encStringValue(encryptedName),
+      });
+      this.newProject.name = "";
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  /** Open the New Machine Account modal from the dropdown. */
+  protected openNewMachineAccount(): void {
+    this.closeNewMenu();
+    if (!this.selectedOrg()) {
+      this.openProvision();
+      return;
+    }
+    if (this.orgKeyStatus()) {
+      this.error.set(this.orgKeyStatus());
+      return;
+    }
+    this.newMachineAccount.name = "";
+    this.newMachineAccount.write = true;
+    this.error.set(null);
+    this.modalMode.set("new-machine-account");
+  }
+
+  /** Create a machine account for the selected org. */
+  protected async createMachineAccount(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org || !this.bwsOrgKey) {
+      this.error.set("This organization does not have a decryptable BWS key envelope.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+    this.generatedAccessToken.set(null);
+
+    try {
+      const clientSecret = this.randomSecret();
+      const seed = this.randomBytes(16);
+      const tokenKey = await this.deriveTokenKey(seed);
+      const encryptedPayload = await this.encryptService.encryptString(
+        JSON.stringify({ encryptionKey: this.bwsOrgKey.toBase64() }),
+        tokenKey,
+      );
+
+      const response = await this.smAdminService.createMachineAccount(org.id, {
+        name: this.newMachineAccount.name.trim(),
+        clientSecret,
+        encryptedPayload: this.encStringValue(encryptedPayload),
+        write: this.newMachineAccount.write,
+      });
+
+      this.generatedAccessToken.set(`0.${response.clientId}.${clientSecret}:${this.b64(seed)}`);
+      this.newMachineAccount.name = "";
+      await this.refreshState();
+      this.modalMode.set("token");
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  // --- Secret bulk-select and copy actions ---
+
+  protected copySecretName(secret: DecryptedSecret): void {
+    this.rowMenu.set(null);
+    void navigator.clipboard.writeText(secret.label);
+  }
+
+  protected copySecretValue(secret: DecryptedSecret): void {
+    this.rowMenu.set(null);
+    void navigator.clipboard.writeText(secret.secretValue);
+  }
+
+  protected toggleSecretSelection(id: string): void {
+    const current = this.selectedSecretIds();
+    const next = new Set(current);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.selectedSecretIds.set(next);
+  }
+
+  protected isSecretSelected(id: string): boolean {
+    return this.selectedSecretIds().has(id);
+  }
+
+  protected allSecretsSelected(preview: boolean): boolean {
+    const visible = this.visibleSecrets(preview);
+    if (visible.length === 0) {
+      return false;
+    }
+    const sel = this.selectedSecretIds();
+    return visible.every((s) => sel.has(s.id));
+  }
+
+  protected toggleSelectAllSecrets(preview: boolean): void {
+    const visible = this.visibleSecrets(preview);
+    if (this.allSecretsSelected(preview)) {
+      const next = new Set(this.selectedSecretIds());
+      visible.forEach((s) => next.delete(s.id));
+      this.selectedSecretIds.set(next);
+    } else {
+      const next = new Set(this.selectedSecretIds());
+      visible.forEach((s) => next.add(s.id));
+      this.selectedSecretIds.set(next);
+    }
+  }
+
+  protected askBulkDeleteSecrets(): void {
+    if (this.selectedSecretIds().size === 0) {
+      return;
+    }
+    this.error.set(null);
+    this.bulkDeletePending.set(true);
+    this.modalMode.set("delete-secrets-bulk");
+  }
+
+  protected async confirmBulkDeleteSecrets(): Promise<void> {
+    const org = this.selectedOrg();
+    const ids = [...this.selectedSecretIds()];
+    if (!org || ids.length === 0) {
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.deleteSecrets(org.id, ids);
+      this.selectedSecretIds.set(new Set());
+      this.bulkDeletePending.set(false);
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  // --- Project view/edit actions ---
+
+  protected openViewProject(project: DecryptedProject): void {
+    this.rowMenu.set(null);
+    this.error.set(null);
+    this.viewProject.set(project);
+    this.modalMode.set("view-project");
+  }
+
+  protected startEditProject(project: DecryptedProject): void {
+    this.rowMenu.set(null);
+    this.error.set(null);
+    this.editProject.id = project.id;
+    this.editProject.name = project.label;
+    this.modalMode.set("edit-project");
+  }
+
+  protected async saveEditProject(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      this.error.set("No organization selected.");
+      return;
+    }
+    const name = this.editProject.name.trim();
+    if (!name) {
+      this.error.set("Project name is required.");
+      return;
+    }
+
+    this.loading.set(true);
+    this.error.set(null);
+
+    try {
+      await this.smAdminService.updateProject(org.id, this.editProject.id, {
+        displayName: name,
+      });
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected projectSecrets(projectId: string): DecryptedSecret[] {
+    return this.decryptedSecrets().filter((s) => s.projectId === projectId);
+  }
+
+  // --- Machine account actions ---
+
+  protected openViewMachine(account: MachineAccount): void {
+    this.rowMenu.set(null);
+    this.viewingMachine.set(account);
+    this.modalMode.set("view-machine");
+  }
+
+  protected askDeleteMachine(account: MachineAccount): void {
+    this.rowMenu.set(null);
+    this.pendingDeleteMachine.set(account);
+    this.modalMode.set("delete-machine");
+  }
+
+  protected async confirmDeleteMachine(): Promise<void> {
+    const org = this.selectedOrg();
+    const account = this.pendingDeleteMachine();
+    if (!org || !account) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      await this.smAdminService.revokeToken(org.id, account.clientId);
+      this.pendingDeleteMachine.set(null);
+      this.selectedMachineIds.set(new Set());
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected openDeleteMachinesBulk(): void {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    const selected = this.selectedMachineIds();
+    const accounts = org.machineAccounts.filter((a) => selected.has(a.clientId));
+    if (accounts.length === 0) {
+      return;
+    }
+    this.pendingDeleteMachinesBulk.set(accounts);
+    this.modalMode.set("delete-machines-bulk");
+  }
+
+  protected async confirmDeleteMachinesBulk(): Promise<void> {
+    const org = this.selectedOrg();
+    const accounts = this.pendingDeleteMachinesBulk();
+    if (!org || accounts.length === 0) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      for (const account of accounts) {
+        await this.smAdminService.revokeToken(org.id, account.clientId);
+      }
+      this.pendingDeleteMachinesBulk.set([]);
+      this.selectedMachineIds.set(new Set());
+      await this.refreshState();
+      this.modalMode.set(null);
+    } catch (error) {
+      this.error.set(this.messageFromError(error));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected toggleMachineSelection(clientId: string): void {
+    const current = new Set(this.selectedMachineIds());
+    if (current.has(clientId)) {
+      current.delete(clientId);
+    } else {
+      current.add(clientId);
+    }
+    this.selectedMachineIds.set(current);
+  }
+
+  protected toggleAllMachines(): void {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    const all = org.machineAccounts;
+    const current = this.selectedMachineIds();
+    if (current.size === all.length) {
+      this.selectedMachineIds.set(new Set());
+    } else {
+      this.selectedMachineIds.set(new Set(all.map((a) => a.clientId)));
+    }
+  }
+
+  protected isMachineSelected(clientId: string): boolean {
+    return this.selectedMachineIds().has(clientId);
+  }
+
+  protected allMachinesSelected(): boolean {
+    const org = this.selectedOrg();
+    if (!org || org.machineAccounts.length === 0) {
+      return false;
+    }
+    return this.selectedMachineIds().size === org.machineAccounts.length;
+  }
+
+  protected selectedMachineCount(): number {
+    return this.selectedMachineIds().size;
+  }
+
+  protected machineIdentityUrl(): string {
+    return `${window.location.origin}/identity`;
+  }
+
+  protected machineApiUrl(): string {
+    return `${window.location.origin}/api`;
   }
 
   protected projectOptions(): DecryptedProject[] {

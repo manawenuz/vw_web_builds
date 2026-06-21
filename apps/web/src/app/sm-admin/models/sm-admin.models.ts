@@ -116,3 +116,29 @@ export interface DeleteOrganizationResponse {
     projects: number;
   };
 }
+
+export interface UpdateProjectRequest {
+  displayName?: string;
+  name?: string;
+}
+
+export interface UpdateProjectResponse {
+  id: string;
+  organizationId: string;
+  name?: string;
+  displayName: string;
+  creationDate: string;
+  revisionDate?: string;
+}
+
+export interface CreateMachineAccountRequest {
+  name: string;
+  clientSecret: string;
+  encryptedPayload: string;
+  write: boolean;
+}
+
+export interface CreateMachineAccountResponse {
+  clientId: string;
+  serviceAccountId: string;
+}

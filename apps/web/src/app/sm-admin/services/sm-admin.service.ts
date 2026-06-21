@@ -7,6 +7,8 @@ import {
   ProvisionResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  CreateMachineAccountRequest,
+  CreateMachineAccountResponse,
   DeleteOrganizationResponse,
   EncryptedProvisionRequest,
   EncryptedProvisionResponse,
@@ -14,6 +16,8 @@ import {
   SecretResponse,
   SecretWriteRequest,
   SecretsListResponse,
+  UpdateProjectRequest,
+  UpdateProjectResponse,
 } from "../models/sm-admin.models";
 
 @Injectable({ providedIn: "root" })
@@ -109,6 +113,29 @@ export class SmAdminService {
 
   async deleteProject(orgId: string, projectId: string): Promise<void> {
     await this.request<void>("DELETE", `/_admin/orgs/${orgId}/projects/${projectId}`);
+  }
+
+  async updateProject(
+    orgId: string,
+    projectId: string,
+    req: UpdateProjectRequest,
+  ): Promise<UpdateProjectResponse> {
+    return this.request<UpdateProjectResponse>(
+      "PUT",
+      `/_admin/orgs/${orgId}/projects/${projectId}`,
+      req,
+    );
+  }
+
+  async createMachineAccount(
+    orgId: string,
+    req: CreateMachineAccountRequest,
+  ): Promise<CreateMachineAccountResponse> {
+    return this.request<CreateMachineAccountResponse>(
+      "POST",
+      `/_admin/orgs/${orgId}/machine-accounts`,
+      req,
+    );
   }
 
   async revokeToken(orgId: string, clientId: string): Promise<void> {
