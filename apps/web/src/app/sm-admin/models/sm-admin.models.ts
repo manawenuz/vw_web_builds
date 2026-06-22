@@ -11,9 +11,11 @@ export interface OrganizationState {
 }
 
 export interface MachineAccount {
-  serviceAccountId: string;
-  clientId: string;
-  write: boolean;
+  id: string;
+  name: string;
+  allProjects: boolean;
+  projectCount: number;
+  tokenCount: number;
 }
 
 export interface ProjectState {
@@ -136,14 +138,111 @@ export interface UpdateProjectResponse {
   revisionDate?: string;
 }
 
-export interface CreateMachineAccountRequest {
+// ── Machine account detail ────────────────────────────────────────────────────
+
+export interface MachineAccountDetail {
+  id: string;
   name: string;
+  allProjects: boolean;
+}
+
+export interface CreateMachineAccountV2Request {
+  name: string;
+}
+
+export interface CreateMachineAccountV2Response {
+  id: string;
+}
+
+export interface UpdateMachineAccountRequest {
+  name?: string;
+  allProjects?: boolean;
+}
+
+export interface UpdateMachineAccountResponse {
+  id: string;
+  name: string;
+  allProjects: boolean;
+}
+
+export interface MachineAccountProjectGrant {
+  projectId: string;
+  write: boolean;
+}
+
+export interface MachineAccountProjectGrantListItem {
+  projectId: string;
+  write: boolean;
+}
+
+export interface SetMachineAccountProjectsRequest {
+  projects: MachineAccountProjectGrant[];
+}
+
+export interface ProjectMachineAccountGrant {
+  machineAccountId: string;
+  write: boolean;
+}
+
+export interface ProjectMachineAccountListItem {
+  machineAccountId: string;
+  name: string;
+  write: boolean;
+}
+
+export interface SetProjectMachineAccountsRequest {
+  machineAccounts: ProjectMachineAccountGrant[];
+}
+
+export interface SecretMachineAccountGrant {
+  machineAccountId: string;
+  write: boolean;
+}
+
+export interface SecretMachineAccountListItem {
+  machineAccountId: string;
+  name: string;
+  write: boolean;
+}
+
+export interface SetSecretMachineAccountsRequest {
+  machineAccounts: SecretMachineAccountGrant[];
+}
+
+// ── Access tokens ─────────────────────────────────────────────────────────────
+
+export interface AccessTokenListItem {
+  clientId: string;
+  name: string;
+  expiresAt: string | null;
+  creationDate: string;
+}
+
+export interface CreateAccessTokenRequest {
+  name: string;
+  expiresAt: string | null;
   clientSecret: string;
   encryptedPayload: string;
   write: boolean;
 }
 
-export interface CreateMachineAccountResponse {
+export interface CreateAccessTokenResponse {
   clientId: string;
   serviceAccountId: string;
+}
+
+// ── Audit events ──────────────────────────────────────────────────────────────
+
+export interface AuditEvent {
+  ts: string;
+  actorType: string;
+  actorId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  detail: string;
+}
+
+export interface AuditEventsResponse {
+  events: AuditEvent[];
 }

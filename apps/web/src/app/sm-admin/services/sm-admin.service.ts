@@ -2,21 +2,33 @@
 import { Injectable } from "@angular/core";
 
 import {
+  AccessTokenListItem,
   AdminState,
-  ProvisionRequest,
-  ProvisionResponse,
-  CreateProjectRequest,
-  CreateProjectResponse,
-  CreateMachineAccountRequest,
-  CreateMachineAccountResponse,
+  AuditEventsResponse,
+  CreateAccessTokenRequest,
+  CreateAccessTokenResponse,
+  CreateMachineAccountV2Request,
+  CreateMachineAccountV2Response,
   DeleteOrganizationResponse,
   EncryptedProvisionRequest,
   EncryptedProvisionResponse,
   MachineAccountEnvelopeResponse,
+  MachineAccountProjectGrantListItem,
   OrgUserKeyResponse,
+  ProjectMachineAccountListItem,
+  ProvisionRequest,
+  ProvisionResponse,
+  CreateProjectRequest,
+  CreateProjectResponse,
+  SecretMachineAccountListItem,
   SecretResponse,
   SecretWriteRequest,
   SecretsListResponse,
+  SetMachineAccountProjectsRequest,
+  SetProjectMachineAccountsRequest,
+  SetSecretMachineAccountsRequest,
+  UpdateMachineAccountRequest,
+  UpdateMachineAccountResponse,
   UpdateProjectRequest,
   UpdateProjectResponse,
 } from "../models/sm-admin.models";
@@ -138,21 +150,6 @@ export class SmAdminService {
     );
   }
 
-  async createMachineAccount(
-    orgId: string,
-    req: CreateMachineAccountRequest,
-  ): Promise<CreateMachineAccountResponse> {
-    return this.request<CreateMachineAccountResponse>(
-      "POST",
-      `/_admin/orgs/${orgId}/machine-accounts`,
-      req,
-    );
-  }
-
-  async revokeToken(orgId: string, clientId: string): Promise<void> {
-    await this.request<void>("DELETE", `/_admin/orgs/${orgId}/machine-accounts/${clientId}`);
-  }
-
   async listSecrets(orgId: string): Promise<SecretsListResponse> {
     return this.request<SecretsListResponse>("GET", `/_admin/orgs/${orgId}/secrets`);
   }
@@ -174,6 +171,153 @@ export class SmAdminService {
       "POST",
       `/_admin/orgs/${orgId}/secrets/delete`,
       ids,
+    );
+  }
+
+  // ── Machine accounts (new multi-MA model) ────────────────────────────────────
+
+  async createMachineAccountV2(
+    orgId: string,
+    req: CreateMachineAccountV2Request,
+  ): Promise<CreateMachineAccountV2Response> {
+    return this.request<CreateMachineAccountV2Response>(
+      "POST",
+      `/_admin/orgs/${orgId}/machine-accounts`,
+      req,
+    );
+  }
+
+  async updateMachineAccount(
+    orgId: string,
+    maId: string,
+    req: UpdateMachineAccountRequest,
+  ): Promise<UpdateMachineAccountResponse> {
+    return this.request<UpdateMachineAccountResponse>(
+      "PUT",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}`,
+      req,
+    );
+  }
+
+  async deleteMachineAccount(orgId: string, maId: string): Promise<{ deletedId: string }> {
+    return this.request<{ deletedId: string }>(
+      "DELETE",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}`,
+    );
+  }
+
+  async getMachineAccountProjects(
+    orgId: string,
+    maId: string,
+  ): Promise<MachineAccountProjectGrantListItem[]> {
+    return this.request<MachineAccountProjectGrantListItem[]>(
+      "GET",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}/projects`,
+    );
+  }
+
+  async setMachineAccountProjects(
+    orgId: string,
+    maId: string,
+    req: SetMachineAccountProjectsRequest,
+  ): Promise<void> {
+    await this.request<void>(
+      "PUT",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}/projects`,
+      req,
+    );
+  }
+
+  // ── Access tokens per MA ──────────────────────────────────────────────────────
+
+  async listAccessTokens(orgId: string, maId: string): Promise<AccessTokenListItem[]> {
+    return this.request<AccessTokenListItem[]>(
+      "GET",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}/access-tokens`,
+    );
+  }
+
+  async createAccessToken(
+    orgId: string,
+    maId: string,
+    req: CreateAccessTokenRequest,
+  ): Promise<CreateAccessTokenResponse> {
+    return this.request<CreateAccessTokenResponse>(
+      "POST",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}/access-tokens`,
+      req,
+    );
+  }
+
+  async revokeAccessToken(
+    orgId: string,
+    maId: string,
+    clientId: string,
+  ): Promise<{ revokedClientId: string }> {
+    return this.request<{ revokedClientId: string }>(
+      "DELETE",
+      `/_admin/orgs/${orgId}/machine-accounts/${maId}/access-tokens/${clientId}`,
+    );
+  }
+
+  // ── Project ↔ MA grants ────────────────────────────────────────────────────────
+
+  async getProjectMachineAccounts(
+    orgId: string,
+    projectId: string,
+  ): Promise<ProjectMachineAccountListItem[]> {
+    return this.request<ProjectMachineAccountListItem[]>(
+      "GET",
+      `/_admin/orgs/${orgId}/projects/${projectId}/machine-accounts`,
+    );
+  }
+
+  async setProjectMachineAccounts(
+    orgId: string,
+    projectId: string,
+    req: SetProjectMachineAccountsRequest,
+  ): Promise<void> {
+    await this.request<void>(
+      "PUT",
+      `/_admin/orgs/${orgId}/projects/${projectId}/machine-accounts`,
+      req,
+    );
+  }
+
+  // ── Secret ↔ MA grants ─────────────────────────────────────────────────────────
+
+  async getSecretMachineAccounts(
+    orgId: string,
+    secretId: string,
+  ): Promise<SecretMachineAccountListItem[]> {
+    return this.request<SecretMachineAccountListItem[]>(
+      "GET",
+      `/_admin/orgs/${orgId}/secrets/${secretId}/machine-accounts`,
+    );
+  }
+
+  async setSecretMachineAccounts(
+    orgId: string,
+    secretId: string,
+    req: SetSecretMachineAccountsRequest,
+  ): Promise<void> {
+    await this.request<void>(
+      "PUT",
+      `/_admin/orgs/${orgId}/secrets/${secretId}/machine-accounts`,
+      req,
+    );
+  }
+
+  // ── Audit events ──────────────────────────────────────────────────────────────
+
+  async getAuditEvents(
+    orgId: string,
+    from: string,
+    to: string,
+  ): Promise<AuditEventsResponse> {
+    return this.request<AuditEventsResponse>(
+      "GET",
+      `/_admin/orgs/${orgId}/audit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     );
   }
 }

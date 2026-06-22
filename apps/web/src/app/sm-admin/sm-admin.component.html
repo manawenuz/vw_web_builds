@@ -237,7 +237,7 @@
                   </th>
                   <th>Name</th>
                   <th>Access</th>
-                  <th>Client ID</th>
+                  <th>Tokens</th>
                   <th class="options-cell"></th>
                 </tr>
               </thead>
@@ -247,41 +247,42 @@
                     <input
                       type="checkbox"
                       aria-label="Select machine account"
-                      [checked]="isMachineSelected(account.clientId)"
-                      (change)="toggleMachineSelection(account.clientId)"
+                      [checked]="isMachineSelected(account.id)"
+                      (change)="toggleMachineSelection(account.id)"
                     />
                   </td>
                   <td>
-                    <span class="item-link">Machine account</span>
-                    <div class="muted mono">{{ account.serviceAccountId }}</div>
+                    <button
+                      type="button"
+                      class="item-link"
+                      style="background:transparent;border:0;padding:0;text-decoration:underline;cursor:pointer"
+                      (click)="openMaDetail(account)"
+                    >
+                      {{ account.name || 'Machine account' }}
+                    </button>
+                    <div class="muted mono">{{ account.id }}</div>
                   </td>
                   <td>
-                    <span
-                      class="badge"
-                      [class.badge-rw]="account.write"
-                      [class.badge-ro]="!account.write"
-                    >
-                      {{ account.write ? "Can read, write" : "Can read" }}
-                    </span>
+                    <span class="muted">{{ account.allProjects ? 'All projects' : account.projectCount + ' project(s)' }}</span>
                   </td>
-                  <td class="mono muted">{{ account.clientId }}</td>
+                  <td class="muted">{{ account.tokenCount }}</td>
                   <td class="options-cell">
                     <button
                       type="button"
                       class="row-options"
                       aria-label="Machine account options"
-                      (click)="toggleRowMenu('machine', account.clientId, $event)"
+                      (click)="toggleRowMenu('machine', account.id, $event)"
                     >
                       ...
                     </button>
                     <div
                       class="row-menu"
-                      *ngIf="isRowMenuOpen('machine', account.clientId)"
+                      *ngIf="isRowMenuOpen('machine', account.id)"
                       [style.top.px]="rowMenuPos()?.top"
                       [style.right.px]="rowMenuPos()?.right"
                     >
-                      <button type="button" (click)="openViewMachine(account)">
-                        View machine account
+                      <button type="button" (click)="openMaDetail(account)">
+                        View / manage
                       </button>
                       <button type="button" class="danger" (click)="askDeleteMachine(account)">
                         Delete machine account
@@ -572,7 +573,15 @@
       <h2>Edit secret</h2>
       <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">×</button>
     </div>
-    <div class="modal-body">
+    <!-- Tab bar -->
+    <div class="ma-tabs" style="margin:-8px 0 0">
+      <button type="button" class="ma-tab" [class.active]="editSecretTab() === 'value'"
+        (click)="editSecretTab.set('value')">Name / Value</button>
+      <button type="button" class="ma-tab" [class.active]="editSecretTab() === 'machine-accounts'"
+        (click)="editSecretTab.set('machine-accounts');loadSecretMaGrants(editSecret.id)">
+        Machine accounts</button>
+    </div>
+    <div class="modal-body" [style.display]="editSecretTab() === 'value' ? '' : 'none'">
       <label class="field">
         <span>Name <small>(required)</small></span>
         <input [(ngModel)]="editSecret.name" autocomplete="off" />
@@ -595,7 +604,32 @@
         </select>
       </label>
     </div>
-    <div class="modal-actions">
+    <ng-container *ngIf="editSecretTab() === 'machine-accounts'">
+      <div class="modal-body" style="margin-top:8px">
+        <p class="muted" style="font-size:13px;margin:0 0 12px">
+          Grant machine accounts direct access to this secret (independent of project membership).
+        </p>
+        <div *ngFor="let ma of secretMaGrantDraft()" class="grant-row">
+          <input type="checkbox" [id]="'sma-' + ma.machineAccountId"
+            [checked]="ma.selected"
+            (change)="toggleSecretMaGrant(ma.machineAccountId, 'selected', !ma.selected)" />
+          <label [for]="'sma-' + ma.machineAccountId" class="grant-name">{{ ma.name }}</label>
+          <label class="grant-write-label" *ngIf="ma.selected">
+            <input type="checkbox" [checked]="ma.write"
+              (change)="toggleSecretMaGrant(ma.machineAccountId, 'write', !ma.write)" />
+            Can write
+          </label>
+        </div>
+        <div *ngIf="secretMaGrantDraft().length === 0" class="muted" style="margin-top:12px">
+          No machine accounts in this organization.
+        </div>
+        <div class="modal-actions" style="margin-top:16px">
+          <button type="button" class="btn btn-primary" (click)="saveSecretMaGrants()"
+            [disabled]="loading()">Save</button>
+        </div>
+      </div>
+    </ng-container>
+    <div class="modal-actions" *ngIf="editSecretTab() === 'value'">
       <button
         type="button"
         class="btn btn-primary"
@@ -605,6 +639,9 @@
         Save
       </button>
       <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+    <div class="modal-actions" *ngIf="editSecretTab() === 'machine-accounts'">
+      <button type="button" class="btn" (click)="closeModal()">Close</button>
     </div>
   </div>
 </div>
@@ -850,15 +887,8 @@
           placeholder="e.g. deploy-bot"
         />
       </label>
-      <label class="field">
-        <span>Access</span>
-        <select [(ngModel)]="newMachineAccount.write">
-          <option [ngValue]="true">Can read, write</option>
-          <option [ngValue]="false">Can read only</option>
-        </select>
-      </label>
       <p class="muted" style="font-size: 13px; margin: 0">
-        A new access token will be generated and shown once after creation.
+        After creation you can add access tokens from the machine account detail view.
       </p>
     </div>
     <div class="modal-actions">
@@ -919,37 +949,63 @@
         &#215;
       </button>
     </div>
-    <div class="modal-body" *ngIf="viewProject() as proj">
-      <div class="field">
-        <span>Project name</span>
-        <input [value]="proj.label" readonly />
-      </div>
-      <div class="field">
-        <span>Project ID</span>
-        <input class="mono" [value]="proj.id" readonly />
-      </div>
-      <div class="field">
-        <span>Created</span>
-        <input [value]="proj.creationDate | date: 'medium'" readonly />
-      </div>
-      <div class="field">
-        <span>Secrets in this project ({{ projectSecrets(proj.id).length }})</span>
-        <div
-          class="view-project-secrets"
-          *ngIf="projectSecrets(proj.id).length > 0; else noSecrets"
-        >
-          <div class="view-secret-row" *ngFor="let s of projectSecrets(proj.id)">
-            <span class="key-icon" aria-hidden="true"></span>
-            <span class="item-link">{{ s.label }}</span>
-            <span class="muted mono view-secret-id">{{ s.id }}</span>
-          </div>
-        </div>
-        <ng-template #noSecrets>
-          <p class="muted">No secrets assigned to this project.</p>
-        </ng-template>
-      </div>
+    <!-- mini tab bar -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--sm-border);margin-bottom:16px">
+      <button type="button" class="ma-tab" [class.active]="viewProjectTab() === 'secrets'"
+        (click)="viewProjectTab.set('secrets')">Secrets</button>
+      <button type="button" class="ma-tab" [class.active]="viewProjectTab() === 'machine-accounts'"
+        (click)="viewProjectTab.set('machine-accounts');loadProjectMaGrants(viewProject()!.id)">
+        Machine accounts</button>
     </div>
-    <div class="modal-actions">
+    <div class="modal-body" *ngIf="viewProject() as proj">
+      <!-- Secrets sub-tab -->
+      <ng-container *ngIf="viewProjectTab() === 'secrets'">
+        <div class="field"><span>Project name</span><input [value]="proj.label" readonly /></div>
+        <div class="field"><span>Project ID</span><input class="mono" [value]="proj.id" readonly /></div>
+        <div class="field"><span>Created</span><input [value]="proj.creationDate | date:'medium'" readonly /></div>
+        <div class="field">
+          <span>Secrets in this project ({{ projectSecrets(proj.id).length }})</span>
+          <div
+            class="view-project-secrets"
+            *ngIf="projectSecrets(proj.id).length > 0; else noSecrets2"
+          >
+            <div class="view-secret-row" *ngFor="let s of projectSecrets(proj.id)">
+              <span class="key-icon" aria-hidden="true"></span>
+              <span class="item-link">{{ s.label }}</span>
+              <span class="muted mono view-secret-id">{{ s.id }}</span>
+            </div>
+          </div>
+          <ng-template #noSecrets2>
+            <p class="muted">No secrets assigned to this project.</p>
+          </ng-template>
+        </div>
+      </ng-container>
+      <!-- Machine accounts sub-tab -->
+      <ng-container *ngIf="viewProjectTab() === 'machine-accounts'">
+        <p class="muted" style="font-size:13px;margin:0 0 14px">
+          Grant machine accounts access to this project.
+        </p>
+        <div *ngFor="let ma of projectMaGrantDraft()" class="grant-row">
+          <input type="checkbox" [id]="'pma-' + ma.machineAccountId"
+            [checked]="ma.selected"
+            (change)="toggleProjectMaGrant(ma.machineAccountId, 'selected', !ma.selected)" />
+          <label [for]="'pma-' + ma.machineAccountId" class="grant-name">{{ ma.name }}</label>
+          <label class="grant-write-label" *ngIf="ma.selected">
+            <input type="checkbox" [checked]="ma.write"
+              (change)="toggleProjectMaGrant(ma.machineAccountId, 'write', !ma.write)" />
+            Can write
+          </label>
+        </div>
+        <div *ngIf="projectMaGrantDraft().length === 0" class="muted" style="margin-top:12px">
+          No machine accounts in this organization.
+        </div>
+        <div class="modal-actions" style="margin-top:16px">
+          <button type="button" class="btn btn-primary" (click)="saveProjectMaGrants(proj.id)"
+            [disabled]="loading()">Save</button>
+        </div>
+      </ng-container>
+    </div>
+    <div class="modal-actions" *ngIf="viewProjectTab() === 'secrets'">
       <button type="button" class="btn" (click)="closeModal()">Close</button>
     </div>
   </div>
@@ -984,56 +1040,6 @@
   </div>
 </div>
 
-<!-- View machine account modal -->
-<div class="modal-backdrop" *ngIf="modalMode() === 'view-machine'" role="dialog" aria-modal="true">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h2>Machine account</h2>
-      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
-        &#215;
-      </button>
-    </div>
-    <div class="modal-body" *ngIf="viewingMachine() as machine">
-      <label class="field">
-        <span>Client ID</span>
-        <input [value]="machine.clientId" readonly />
-      </label>
-      <label class="field">
-        <span>Service Account ID</span>
-        <input [value]="machine.serviceAccountId" readonly />
-      </label>
-      <label class="field">
-        <span>Access level</span>
-        <input [value]="machine.write ? 'Can read, write' : 'Can read'" readonly />
-      </label>
-      <label class="field">
-        <span>Organization ID</span>
-        <input [value]="selectedOrg()?.id ?? ''" readonly />
-      </label>
-      <label class="field">
-        <span>Identity server URL</span>
-        <input [value]="machineIdentityUrl()" readonly />
-      </label>
-      <label class="field">
-        <span>API server URL</span>
-        <input [value]="machineApiUrl()" readonly />
-      </label>
-      <div *ngIf="(selectedOrg()?.projects?.length ?? 0) > 0">
-        <label class="field">
-          <span>Projects in this organization</span>
-        </label>
-        <div class="machine-project-row" *ngFor="let project of selectedOrg()?.projects ?? []">
-          <span class="muted mono">{{ project.id }}</span>
-          <span class="machine-project-name">{{ project.displayName || project.id }}</span>
-        </div>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn" (click)="closeModal()">Close</button>
-    </div>
-  </div>
-</div>
-
 <!-- Delete single machine account modal -->
 <div
   class="modal-backdrop"
@@ -1051,8 +1057,8 @@
     <div class="modal-body">
       <p>
         Delete machine account
-        <strong class="mono">{{ pendingDeleteMachine()?.clientId }}</strong
-        >? This will revoke its access token. This action cannot be undone.
+        <strong>{{ pendingDeleteMachine()?.name || pendingDeleteMachine()?.id }}</strong
+        >? This will revoke all its access tokens. This action cannot be undone.
       </p>
     </div>
     <div class="modal-actions">
@@ -1091,8 +1097,8 @@
         >? Their access tokens will be revoked. This action cannot be undone.
       </p>
       <div class="machine-bulk-list">
-        <div class="muted mono" *ngFor="let account of pendingDeleteMachinesBulk()">
-          {{ account.clientId }}
+        <div class="muted" *ngFor="let account of pendingDeleteMachinesBulk()">
+          {{ account.name || account.id }}
         </div>
       </div>
     </div>
@@ -1106,6 +1112,224 @@
         Delete
       </button>
       <button type="button" class="btn" (click)="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- MA Detail pane -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'ma-detail'" role="dialog" aria-modal="true">
+  <div class="ma-detail-card">
+
+    <!-- Header -->
+    <div class="ma-detail-header">
+      <div>
+        <h2>{{ viewingMaDetail()?.name || 'Machine account' }}</h2>
+        <div class="muted mono" style="font-size:13px;margin-top:3px">
+          {{ viewingMaDetail()?.id }}
+        </div>
+      </div>
+      <button type="button" class="modal-close" (click)="closeModal()" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="ma-tabs">
+      <button type="button" class="ma-tab" [class.active]="maDetailTab() === 'projects'"
+        (click)="setMaDetailTab('projects')">Projects</button>
+      <button type="button" class="ma-tab" [class.active]="maDetailTab() === 'people'"
+        (click)="setMaDetailTab('people')">People</button>
+      <button type="button" class="ma-tab" [class.active]="maDetailTab() === 'access-tokens'"
+        (click)="setMaDetailTab('access-tokens')">Access tokens</button>
+      <button type="button" class="ma-tab" [class.active]="maDetailTab() === 'event-logs'"
+        (click)="setMaDetailTab('event-logs')">Event logs</button>
+      <button type="button" class="ma-tab" [class.active]="maDetailTab() === 'config'"
+        (click)="setMaDetailTab('config')">Config</button>
+    </div>
+
+    <!-- Tab body -->
+    <div class="ma-tab-body">
+
+      <!-- PROJECTS TAB -->
+      <ng-container *ngIf="maDetailTab() === 'projects'">
+        <p class="muted" style="font-size:13px;margin:0 0 14px">
+          Grant this machine account access to specific projects. Only granted projects' secrets
+          are visible to tokens unless "All projects" is enabled.
+        </p>
+        <div *ngFor="let p of maProjectGrantDraft()" class="grant-row">
+          <input type="checkbox" [id]="'grant-' + p.projectId"
+            [checked]="p.selected"
+            (change)="toggleMaProjectGrant(p.projectId, 'selected', !p.selected)" />
+          <label [for]="'grant-' + p.projectId" class="grant-name">{{ p.label }}</label>
+          <label class="grant-write-label" *ngIf="p.selected">
+            <input type="checkbox" [checked]="p.write"
+              (change)="toggleMaProjectGrant(p.projectId, 'write', !p.write)" />
+            Can write
+          </label>
+        </div>
+        <div *ngIf="maProjectGrantDraft().length === 0" class="muted" style="margin-top:12px">
+          No projects in this organization.
+        </div>
+        <div class="modal-actions" style="margin-top:16px">
+          <button type="button" class="btn btn-primary" (click)="saveMaProjectGrants()"
+            [disabled]="loading()">Save</button>
+        </div>
+      </ng-container>
+
+      <!-- PEOPLE TAB (read-only) -->
+      <ng-container *ngIf="maDetailTab() === 'people'">
+        <p class="muted" style="font-size:13px;margin:0 0 14px">
+          People with access to this machine account. Multi-user sharing is not available in
+          this build.
+        </p>
+        <div class="people-owner-row">
+          <div class="people-avatar">{{ orgInitials(selectedOrg()!) }}</div>
+          <span class="people-name">{{ selectedOrg()?.displayName || 'Organization owner' }}</span>
+          <span class="people-role">Can read, write</span>
+        </div>
+      </ng-container>
+
+      <!-- ACCESS TOKENS TAB -->
+      <ng-container *ngIf="maDetailTab() === 'access-tokens'">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+          <button type="button" class="btn btn-primary" (click)="openCreateAccessToken()"
+            [disabled]="loading() || !bwsOrgKeyAvailable()">
+            Create access token
+          </button>
+        </div>
+        <div *ngFor="let tok of maDetailTokens()" class="token-list-row">
+          <span class="token-name">{{ tok.name || tok.clientId }}</span>
+          <span class="token-meta">
+            {{ tok.expiresAt ? ('Expires ' + (tok.expiresAt | date:'mediumDate')) : 'Never expires' }}
+          </span>
+          <span class="token-meta muted mono" style="font-size:12px">{{ tok.clientId }}</span>
+          <button type="button" class="token-revoke-btn" (click)="askRevokeToken(tok)">
+            Revoke
+          </button>
+        </div>
+        <div *ngIf="maDetailTokens().length === 0" class="muted" style="margin-top:12px">
+          No access tokens. Create one to allow machine access.
+        </div>
+      </ng-container>
+
+      <!-- EVENT LOGS TAB -->
+      <ng-container *ngIf="maDetailTab() === 'event-logs'">
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap">
+          <label class="field" style="flex:1 1 180px;min-width:160px">
+            <span>From</span>
+            <input type="datetime-local" [(ngModel)]="auditFrom" />
+          </label>
+          <label class="field" style="flex:1 1 180px;min-width:160px">
+            <span>To</span>
+            <input type="datetime-local" [(ngModel)]="auditTo" />
+          </label>
+          <button type="button" class="btn" (click)="loadAuditEvents()"
+            [disabled]="maDetailAuditLoading()">Update</button>
+        </div>
+        <div *ngIf="maDetailAuditLoading()" class="muted">Loading events...</div>
+        <div *ngFor="let ev of maDetailAuditEvents()" class="audit-row">
+          <span class="audit-ts">{{ ev.ts | date:'short' }}</span>
+          <span class="audit-action">{{ ev.action }}</span>
+          <span class="audit-resource">{{ ev.resourceType }} {{ ev.resourceId }}</span>
+        </div>
+        <div *ngIf="!maDetailAuditLoading() && maDetailAuditEvents().length === 0"
+          class="muted" style="margin-top:12px">
+          No events found in this range.
+        </div>
+      </ng-container>
+
+      <!-- CONFIG TAB -->
+      <ng-container *ngIf="maDetailTab() === 'config'">
+        <div class="config-row">
+          <span class="config-label">Identity server URL</span>
+          <span class="config-value">{{ machineIdentityUrl() }}</span>
+          <button type="button" class="config-copy-btn"
+            (click)="copyText(machineIdentityUrl())" title="Copy">&#9650;</button>
+        </div>
+        <div class="config-row">
+          <span class="config-label">API server URL</span>
+          <span class="config-value">{{ machineApiUrl() }}</span>
+          <button type="button" class="config-copy-btn"
+            (click)="copyText(machineApiUrl())" title="Copy">&#9650;</button>
+        </div>
+        <div class="config-row">
+          <span class="config-label">Organization ID</span>
+          <span class="config-value">{{ selectedOrg()?.id }}</span>
+          <button type="button" class="config-copy-btn"
+            (click)="copyText(selectedOrg()?.id ?? '')" title="Copy">&#9650;</button>
+        </div>
+        <div class="config-row" *ngFor="let p of maProjectGrantDraft(); let i = index">
+          <span class="config-label">{{ i === 0 ? 'Project IDs' : '' }}</span>
+          <span class="config-value">{{ p.projectId }} ({{ p.label }})</span>
+          <button type="button" class="config-copy-btn"
+            (click)="copyText(p.projectId)" title="Copy">&#9650;</button>
+        </div>
+        <div *ngIf="maProjectGrantDraft().length === 0" class="config-row">
+          <span class="config-label">Project IDs</span>
+          <span class="muted">No projects granted</span>
+        </div>
+      </ng-container>
+
+    </div><!-- /ma-tab-body -->
+  </div><!-- /ma-detail-card -->
+</div>
+
+<!-- Create access token (shown over MA detail) -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'ma-create-token'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Create access token</h2>
+      <button type="button" class="modal-close" (click)="modalMode.set('ma-detail')" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="font-size:13px;margin:0 0 12px">
+        The token will be shown once after creation and cannot be retrieved again.
+      </p>
+      <label class="field">
+        <span>Token name <small>(required)</small></span>
+        <input [(ngModel)]="newAccessToken.name" autocomplete="off" placeholder="e.g. deploy-ci" />
+      </label>
+      <label class="field">
+        <span>Expires <small>(leave blank for never)</small></span>
+        <input type="datetime-local" [(ngModel)]="newAccessToken.expiresAt" />
+      </label>
+      <label class="field">
+        <span>Access</span>
+        <select [(ngModel)]="newAccessToken.write">
+          <option [ngValue]="true">Can read, write</option>
+          <option [ngValue]="false">Can read only</option>
+        </select>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" (click)="createAccessToken()"
+        [disabled]="loading() || !newAccessToken.name.trim()">Create</button>
+      <button type="button" class="btn" (click)="modalMode.set('ma-detail')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Revoke access token confirm -->
+<div class="modal-backdrop" *ngIf="modalMode() === 'ma-delete-token'" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h2>Revoke access token</h2>
+      <button type="button" class="modal-close" (click)="modalMode.set('ma-detail')" aria-label="Close">
+        &#215;
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Revoke token <strong>{{ pendingRevokeToken()?.name || pendingRevokeToken()?.clientId }}</strong>?
+        Any services using this token will immediately lose access. This action cannot be undone.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-danger" (click)="confirmRevokeToken()"
+        [disabled]="loading()">Revoke</button>
+      <button type="button" class="btn" (click)="modalMode.set('ma-detail')">Cancel</button>
     </div>
   </div>
 </div>

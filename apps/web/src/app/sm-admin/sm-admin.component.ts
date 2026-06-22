@@ -20,8 +20,11 @@ import { KeyService } from "@bitwarden/key-management";
 import { UserId } from "@bitwarden/user-core";
 
 import {
+  AccessTokenListItem,
   AdminState,
+  AuditEvent,
   MachineAccount,
+  MachineAccountProjectGrantListItem,
   OrganizationState,
   ProjectState,
   SecretEntry,
@@ -59,7 +62,9 @@ type ModalMode =
   | "delete-org"
   | "new-project"
   | "new-machine-account"
-  | "view-machine"
+  | "ma-detail"
+  | "ma-create-token"
+  | "ma-delete-token"
   | "delete-machine"
   | "delete-machines-bulk"
   | "relink-org"
@@ -987,6 +992,238 @@ type ModalMode =
         gap: 4px;
         font-size: 13px;
       }
+
+      /* MA detail tabbed pane (lives at modal-backdrop level, larger) */
+      .ma-detail-card {
+        width: min(900px, 100%);
+        max-height: min(92vh, calc(100vh - 32px));
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: var(--sm-surface);
+        border: 1px solid var(--sm-border-strong);
+        border-radius: 10px;
+        box-shadow: var(--sm-shadow);
+      }
+
+      .ma-detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 24px 0;
+        flex: 0 0 auto;
+      }
+
+      .ma-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid var(--sm-border);
+        padding: 0 24px;
+        margin-top: 16px;
+        flex: 0 0 auto;
+      }
+
+      .ma-tab {
+        border: 0;
+        background: transparent;
+        color: var(--sm-muted);
+        font-weight: 600;
+        font-size: 14px;
+        padding: 10px 16px;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+
+      .ma-tab.active {
+        color: var(--sm-primary);
+        border-bottom-color: var(--sm-primary);
+      }
+
+      .ma-tab:hover:not(.active) {
+        color: var(--sm-text);
+      }
+
+      .ma-tab-body {
+        overflow: auto;
+        flex: 1 1 auto;
+        padding: 20px 24px 24px;
+      }
+
+      /* Grant row: checkbox + name + write toggle */
+      .grant-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--sm-border);
+        font-size: 14px;
+      }
+
+      .grant-row:last-child {
+        border-bottom: 0;
+      }
+
+      .grant-name {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+
+      .grant-write-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--sm-muted);
+      }
+
+      /* Audit event list */
+      .audit-row {
+        display: flex;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--sm-border);
+        font-size: 13px;
+      }
+
+      .audit-row:last-child {
+        border-bottom: 0;
+      }
+
+      .audit-ts {
+        flex: 0 0 160px;
+        color: var(--sm-muted);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .audit-action {
+        flex: 0 0 120px;
+        font-weight: 600;
+      }
+
+      .audit-resource {
+        flex: 1 1 auto;
+        color: var(--sm-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* Token list in MA detail */
+      .token-list-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--sm-border);
+        font-size: 14px;
+      }
+
+      .token-list-row:last-child {
+        border-bottom: 0;
+      }
+
+      .token-name {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+
+      .token-meta {
+        color: var(--sm-muted);
+        font-size: 13px;
+        flex: 0 0 auto;
+      }
+
+      .token-revoke-btn {
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: var(--sm-danger);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+
+      .token-revoke-btn:hover {
+        background: var(--sm-surface-hover);
+      }
+
+      /* People tab read-only chip */
+      .people-owner-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--sm-border);
+      }
+
+      .people-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--sm-primary);
+        color: #ffffff;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 700;
+        flex: 0 0 auto;
+      }
+
+      .people-name {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+
+      .people-role {
+        font-size: 13px;
+        color: var(--sm-muted);
+      }
+
+      /* Config tab copy rows */
+      .config-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--sm-border);
+      }
+
+      .config-row:last-child {
+        border-bottom: 0;
+      }
+
+      .config-label {
+        flex: 0 0 180px;
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--sm-muted);
+      }
+
+      .config-value {
+        flex: 1 1 auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .config-copy-btn {
+        flex: 0 0 auto;
+        border: 0;
+        background: transparent;
+        color: var(--sm-muted);
+        font-size: 13px;
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
+
+      .config-copy-btn:hover {
+        background: var(--sm-surface-hover);
+        color: var(--sm-text);
+      }
     `,
   ],
 })
@@ -1023,18 +1260,58 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   // Form state for New Project modal.
   protected readonly newProject = { name: "" };
 
-  // Form state for New Machine Account modal.
-  protected readonly newMachineAccount = { name: "", write: true };
+  // Form state for New Machine Account modal (write field removed — per-token now).
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in openNewMachineAccount
+  protected newMachineAccount = { name: "" };
 
   // Secret bulk-select state.
   protected readonly selectedSecretIds = signal<Set<string>>(new Set());
   protected readonly bulkDeletePending = signal(false);
 
   // Machine account view/delete state.
-  protected readonly viewingMachine = signal<MachineAccount | null>(null);
   protected readonly pendingDeleteMachine = signal<MachineAccount | null>(null);
   protected readonly pendingDeleteMachinesBulk = signal<MachineAccount[]>([]);
   protected readonly selectedMachineIds = signal<Set<string>>(new Set());
+
+  // MA detail view state
+  protected readonly maDetailTab = signal<
+    "projects" | "people" | "access-tokens" | "event-logs" | "config"
+  >("access-tokens");
+  protected readonly viewingMaDetail = signal<MachineAccount | null>(null);
+  protected readonly maDetailProjects = signal<MachineAccountProjectGrantListItem[]>([]);
+  protected readonly maDetailTokens = signal<AccessTokenListItem[]>([]);
+  protected readonly maDetailAuditEvents = signal<AuditEvent[]>([]);
+  protected readonly maDetailAuditLoading = signal(false);
+
+  // Create access token sub-modal form
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in openCreateAccessToken
+  protected newAccessToken = { name: "", expiresAt: "", write: true };
+
+  // Revoke access token confirm
+  protected readonly pendingRevokeToken = signal<AccessTokenListItem | null>(null);
+
+  // MA project-grants edit state (Projects tab of detail)
+  protected readonly maProjectGrantDraft = signal<
+    Array<{ projectId: string; label: string; write: boolean; selected: boolean }>
+  >([]);
+
+  // Audit date range inputs
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in loadAuditEvents
+  protected auditFrom = "";
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in loadAuditEvents
+  protected auditTo = "";
+
+  // Project view MA grants tab state
+  protected readonly viewProjectTab = signal<"secrets" | "machine-accounts">("secrets");
+  protected readonly projectMaGrantDraft = signal<
+    Array<{ machineAccountId: string; name: string; write: boolean; selected: boolean }>
+  >([]);
+
+  // Secret edit MA grants tab state
+  protected readonly editSecretTab = signal<"value" | "machine-accounts">("value");
+  protected readonly secretMaGrantDraft = signal<
+    Array<{ machineAccountId: string; name: string; write: boolean; selected: boolean }>
+  >([]);
 
   protected readonly newSecret = {
     name: "",
@@ -1078,7 +1355,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     return this.organizations().find((org) => org.id === orgId) ?? null;
   });
 
-   
+
   // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
   private userId: UserId | null = null;
   // eslint-disable-next-line @typescript-eslint/prefer-readonly -- reassigned in ngOnInit
@@ -1200,7 +1477,12 @@ export class SmAdminComponent implements OnInit, OnDestroy {
   }
 
   protected closeModal(): void {
+    const prevMode = this.modalMode();
     this.modalMode.set(null);
+    // After token-display that was triggered from MA detail, re-open detail
+    if (prevMode === "token" && this.viewingMaDetail()) {
+      this.modalMode.set("ma-detail");
+    }
   }
 
   protected async createSecureOrg(): Promise<void> {
@@ -1349,6 +1631,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.editSecret.value = secret.secretValue;
     this.editSecret.note = secret.noteText;
     this.editSecret.projectId = secret.projectId ?? "";
+    this.editSecretTab.set("value");
     this.modalMode.set("edit-secret");
   }
 
@@ -1570,44 +1853,39 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       this.error.set(this.orgKeyStatus());
       return;
     }
-    this.newMachineAccount.name = "";
-    this.newMachineAccount.write = true;
+    this.newMachineAccount = { name: "" };
     this.error.set(null);
     this.modalMode.set("new-machine-account");
   }
 
-  /** Create a machine account for the selected org. */
+  /** Create a machine account shell (name only), then open detail for token creation. */
   protected async createMachineAccount(): Promise<void> {
     const org = this.selectedOrg();
-    if (!org || !this.bwsOrgKey) {
-      this.error.set("This organization does not have a decryptable BWS key envelope.");
+    if (!org) {
+      this.error.set("No organization selected.");
       return;
     }
 
     this.loading.set(true);
     this.error.set(null);
-    this.generatedAccessToken.set(null);
 
     try {
-      const clientSecret = this.randomSecret();
-      const seed = this.randomBytes(16);
-      const tokenKey = await this.deriveTokenKey(seed);
-      const encryptedPayload = await this.encryptService.encryptString(
-        JSON.stringify({ encryptionKey: this.bwsOrgKey.toBase64() }),
-        tokenKey,
-      );
-
-      const response = await this.smAdminService.createMachineAccount(org.id, {
+      // Step 1: Create the MA shell (name only)
+      const response = await this.smAdminService.createMachineAccountV2(org.id, {
         name: this.newMachineAccount.name.trim(),
-        clientSecret,
-        encryptedPayload: this.encStringValue(encryptedPayload),
-        write: this.newMachineAccount.write,
       });
-
-      this.generatedAccessToken.set(`0.${response.clientId}.${clientSecret}:${this.b64(seed)}`);
-      this.newMachineAccount.name = "";
       await this.refreshState();
-      this.modalMode.set("token");
+      // Step 2: Open detail view on the new MA so the user can create tokens there
+      const newMa: MachineAccount = {
+        id: response.id,
+        name: this.newMachineAccount.name.trim(),
+        allProjects: false,
+        projectCount: 0,
+        tokenCount: 0,
+      };
+      this.newMachineAccount = { name: "" };
+      this.modalMode.set(null);
+      await this.openMaDetail(newMa);
     } catch (error) {
       this.error.set(this.messageFromError(error));
     } finally {
@@ -1702,6 +1980,8 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.rowMenu.set(null);
     this.error.set(null);
     this.viewProject.set(project);
+    this.viewProjectTab.set("secrets");
+    this.projectMaGrantDraft.set([]);
     this.modalMode.set("view-project");
   }
 
@@ -1747,10 +2027,181 @@ export class SmAdminComponent implements OnInit, OnDestroy {
 
   // --- Machine account actions ---
 
-  protected openViewMachine(account: MachineAccount): void {
+  protected async openMaDetail(account: MachineAccount): Promise<void> {
     this.rowMenu.set(null);
-    this.viewingMachine.set(account);
-    this.modalMode.set("view-machine");
+    this.error.set(null);
+    this.viewingMaDetail.set(account);
+    this.maDetailTab.set("access-tokens");
+    this.maDetailProjects.set([]);
+    this.maDetailTokens.set([]);
+    this.maDetailAuditEvents.set([]);
+    this.modalMode.set("ma-detail");
+    await this.refreshMaDetail(account);
+  }
+
+  private async refreshMaDetail(account: MachineAccount): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    try {
+      const [tokens, grants] = await Promise.all([
+        this.smAdminService.listAccessTokens(org.id, account.id),
+        this.smAdminService.getMachineAccountProjects(org.id, account.id),
+      ]);
+      this.maDetailTokens.set(tokens);
+      this.maDetailProjects.set(grants);
+      // Build project-grant draft from the full project list + existing grants
+      const grantMap = new Map(grants.map((g) => [g.projectId, g.write]));
+      const draft = this.decryptedProjects().map((proj) => ({
+        projectId: proj.id,
+        label: proj.label,
+        write: grantMap.get(proj.id) ?? false,
+        selected: grantMap.has(proj.id),
+      }));
+      this.maProjectGrantDraft.set(draft);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    }
+  }
+
+  protected setMaDetailTab(
+    tab: "projects" | "people" | "access-tokens" | "event-logs" | "config",
+  ): void {
+    this.maDetailTab.set(tab);
+  }
+
+  protected async saveMaProjectGrants(): Promise<void> {
+    const org = this.selectedOrg();
+    const ma = this.viewingMaDetail();
+    if (!org || !ma) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const projects = this.maProjectGrantDraft()
+        .filter((p) => p.selected)
+        .map((p) => ({ projectId: p.projectId, write: p.write }));
+      await this.smAdminService.setMachineAccountProjects(org.id, ma.id, { projects });
+      await this.refreshMaDetail(ma);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected toggleMaProjectGrant(
+    projectId: string,
+    field: "selected" | "write",
+    value: boolean,
+  ): void {
+    this.maProjectGrantDraft.update((draft) =>
+      draft.map((p) => (p.projectId === projectId ? { ...p, [field]: value } : p)),
+    );
+  }
+
+  protected openCreateAccessToken(): void {
+    this.newAccessToken = { name: "", expiresAt: "", write: true };
+    this.error.set(null);
+    this.modalMode.set("ma-create-token");
+  }
+
+  protected async createAccessToken(): Promise<void> {
+    const org = this.selectedOrg();
+    const ma = this.viewingMaDetail();
+    if (!org || !ma || !this.bwsOrgKey) {
+      this.error.set("Organization key not available.");
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    this.generatedAccessToken.set(null);
+    try {
+      const clientSecret = this.randomSecret();
+      const seed = this.randomBytes(16);
+      const tokenKey = await this.deriveTokenKey(seed);
+      const encryptedPayload = await this.encryptService.encryptString(
+        JSON.stringify({ encryptionKey: this.bwsOrgKey.toBase64() }),
+        tokenKey,
+      );
+      const response = await this.smAdminService.createAccessToken(org.id, ma.id, {
+        name: this.newAccessToken.name.trim(),
+        expiresAt: this.newAccessToken.expiresAt.trim() || null,
+        clientSecret,
+        encryptedPayload: this.encStringValue(encryptedPayload),
+        write: this.newAccessToken.write,
+      });
+      this.generatedAccessToken.set(
+        `0.${response.clientId}.${clientSecret}:${this.b64(seed)}`,
+      );
+      // Close create modal, show token modal; closeModal() will re-open detail
+      this.modalMode.set("token");
+      await this.refreshMaDetail(ma);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected askRevokeToken(token: AccessTokenListItem): void {
+    this.pendingRevokeToken.set(token);
+    this.modalMode.set("ma-delete-token");
+  }
+
+  protected async confirmRevokeToken(): Promise<void> {
+    const org = this.selectedOrg();
+    const ma = this.viewingMaDetail();
+    const token = this.pendingRevokeToken();
+    if (!org || !ma || !token) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      await this.smAdminService.revokeAccessToken(org.id, ma.id, token.clientId);
+      this.pendingRevokeToken.set(null);
+      this.modalMode.set("ma-detail");
+      await this.refreshMaDetail(ma);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  protected async loadAuditEvents(): Promise<void> {
+    const org = this.selectedOrg();
+    const ma = this.viewingMaDetail();
+    if (!org || !ma) {
+      return;
+    }
+    // Default range: last 7 days
+    const to = this.auditTo.trim() || new Date().toISOString();
+    const from = this.auditFrom.trim() || new Date(Date.now() - 7 * 86400_000).toISOString();
+    this.maDetailAuditLoading.set(true);
+    this.error.set(null);
+    try {
+      const resp = await this.smAdminService.getAuditEvents(org.id, from, to);
+      // Filter client-side to events involving this MA (actorId or resourceId === ma.id)
+      this.maDetailAuditEvents.set(
+        resp.events.filter((e) => e.actorId === ma.id || e.resourceId === ma.id),
+      );
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.maDetailAuditLoading.set(false);
+    }
+  }
+
+  protected bwsOrgKeyAvailable(): boolean {
+    return this.bwsOrgKey !== null;
+  }
+
+  protected copyText(text: string): void {
+    void navigator.clipboard.writeText(text);
   }
 
   protected askDeleteMachine(account: MachineAccount): void {
@@ -1768,7 +2219,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.loading.set(true);
     this.error.set(null);
     try {
-      await this.smAdminService.revokeToken(org.id, account.clientId);
+      await this.smAdminService.deleteMachineAccount(org.id, account.id);
       this.pendingDeleteMachine.set(null);
       this.selectedMachineIds.set(new Set());
       await this.refreshState();
@@ -1786,7 +2237,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
       return;
     }
     const selected = this.selectedMachineIds();
-    const accounts = org.machineAccounts.filter((a) => selected.has(a.clientId));
+    const accounts = org.machineAccounts.filter((a) => selected.has(a.id));
     if (accounts.length === 0) {
       return;
     }
@@ -1804,7 +2255,7 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     this.error.set(null);
     try {
       for (const account of accounts) {
-        await this.smAdminService.revokeToken(org.id, account.clientId);
+        await this.smAdminService.deleteMachineAccount(org.id, account.id);
       }
       this.pendingDeleteMachinesBulk.set([]);
       this.selectedMachineIds.set(new Set());
@@ -1817,12 +2268,12 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     }
   }
 
-  protected toggleMachineSelection(clientId: string): void {
+  protected toggleMachineSelection(id: string): void {
     const current = new Set(this.selectedMachineIds());
-    if (current.has(clientId)) {
-      current.delete(clientId);
+    if (current.has(id)) {
+      current.delete(id);
     } else {
-      current.add(clientId);
+      current.add(id);
     }
     this.selectedMachineIds.set(current);
   }
@@ -1837,12 +2288,12 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     if (current.size === all.length) {
       this.selectedMachineIds.set(new Set());
     } else {
-      this.selectedMachineIds.set(new Set(all.map((a) => a.clientId)));
+      this.selectedMachineIds.set(new Set(all.map((a) => a.id)));
     }
   }
 
-  protected isMachineSelected(clientId: string): boolean {
-    return this.selectedMachineIds().has(clientId);
+  protected isMachineSelected(id: string): boolean {
+    return this.selectedMachineIds().has(id);
   }
 
   protected allMachinesSelected(): boolean {
@@ -1878,6 +2329,110 @@ export class SmAdminComponent implements OnInit, OnDestroy {
     const words = label.split(/\s+/).filter(Boolean);
     const initials = words.length > 1 ? `${words[0][0]}${words[1][0]}` : label.slice(0, 2);
     return initials.toUpperCase();
+  }
+
+  // --- Project MA grants ---
+
+  protected async loadProjectMaGrants(projectId: string): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    try {
+      const currentGrants = await this.smAdminService.getProjectMachineAccounts(org.id, projectId);
+      const grantMap = new Map(currentGrants.map((g) => [g.machineAccountId, g.write]));
+      const draft = (org.machineAccounts ?? []).map((ma) => ({
+        machineAccountId: ma.id,
+        name: ma.name || ma.id,
+        write: grantMap.get(ma.id) ?? false,
+        selected: grantMap.has(ma.id),
+      }));
+      this.projectMaGrantDraft.set(draft);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    }
+  }
+
+  protected toggleProjectMaGrant(
+    maId: string,
+    field: "selected" | "write",
+    value: boolean,
+  ): void {
+    this.projectMaGrantDraft.update((draft) =>
+      draft.map((g) => (g.machineAccountId === maId ? { ...g, [field]: value } : g)),
+    );
+  }
+
+  protected async saveProjectMaGrants(projectId: string): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const machineAccounts = this.projectMaGrantDraft()
+        .filter((g) => g.selected)
+        .map((g) => ({ machineAccountId: g.machineAccountId, write: g.write }));
+      await this.smAdminService.setProjectMachineAccounts(org.id, projectId, { machineAccounts });
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  // --- Secret MA grants ---
+
+  protected async loadSecretMaGrants(secretId: string): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org || !secretId) {
+      return;
+    }
+    try {
+      const grants = await this.smAdminService.getSecretMachineAccounts(org.id, secretId);
+      const grantMap = new Map(grants.map((g) => [g.machineAccountId, g.write]));
+      const draft = (org.machineAccounts ?? []).map((ma) => ({
+        machineAccountId: ma.id,
+        name: ma.name || ma.id,
+        write: grantMap.get(ma.id) ?? false,
+        selected: grantMap.has(ma.id),
+      }));
+      this.secretMaGrantDraft.set(draft);
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    }
+  }
+
+  protected toggleSecretMaGrant(
+    maId: string,
+    field: "selected" | "write",
+    value: boolean,
+  ): void {
+    this.secretMaGrantDraft.update((draft) =>
+      draft.map((g) => (g.machineAccountId === maId ? { ...g, [field]: value } : g)),
+    );
+  }
+
+  protected async saveSecretMaGrants(): Promise<void> {
+    const org = this.selectedOrg();
+    if (!org || !this.editSecret.id) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const machineAccounts = this.secretMaGrantDraft()
+        .filter((g) => g.selected)
+        .map((g) => ({ machineAccountId: g.machineAccountId, write: g.write }));
+      await this.smAdminService.setSecretMachineAccounts(org.id, this.editSecret.id, {
+        machineAccounts,
+      });
+    } catch (err) {
+      this.error.set(this.messageFromError(err));
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   private async loadSelectedOrg(): Promise<void> {
