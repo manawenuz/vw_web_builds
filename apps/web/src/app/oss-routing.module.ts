@@ -217,7 +217,9 @@ const routes: Routes = [
         canActivate: [unauthGuardFn()],
         data: {
           pageTitle: {
-            key: "loginPageEmailEntryScreenTitle",
+            // De-branded: upstream's "loginPageEmailEntryScreenTitle" renders
+            // "Log in to Bitwarden". "logIn" is just "Log in".
+            key: "logIn",
           },
           pageIcon: VaultIcon,
         } satisfies RouteDataProperties & AnonLayoutWrapperData,
@@ -673,6 +675,11 @@ const routes: Routes = [
           ),
         ],
         canDeactivate: [unsavedSendEditsGuard],
+      },
+      {
+        path: "sm",
+        loadChildren: () =>
+          import("./sm-admin/sm-admin.module").then((m) => m.SmAdminModule),
       },
       {
         path: "sm-landing",

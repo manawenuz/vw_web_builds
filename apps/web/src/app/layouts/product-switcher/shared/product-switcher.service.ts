@@ -20,7 +20,7 @@ import {
 } from "@bitwarden/common/admin-console/abstractions/organization/organization.service.abstraction";
 import { PolicyService } from "@bitwarden/common/admin-console/abstractions/policy/policy.service.abstraction";
 import { ProviderService } from "@bitwarden/common/admin-console/abstractions/provider.service";
-import { OrganizationUserType, ProviderType } from "@bitwarden/common/admin-console/enums";
+import { ProviderType } from "@bitwarden/common/admin-console/enums";
 import { Organization } from "@bitwarden/common/admin-console/models/domain/organization";
 import { Provider } from "@bitwarden/common/admin-console/models/domain/provider";
 import { AccountService } from "@bitwarden/common/auth/abstractions/account.service";
@@ -207,9 +207,9 @@ export class ProductSwitcherService {
         // Check if SM ads should be disabled for any organization
         // SM ads are disabled if the user is a regular User (not Admin or Owner)
         // in an organization that has useDisableSMAdsForUsers enabled
-        const shouldDisableSMAds = orgs.some(
-          (org) => org.useDisableSMAdsForUsers === true && org.type === OrganizationUserType.User,
-        );
+        const shouldDisableSMAds = true; // always hide ads for secret manager in Vaultwarden
+        const isSecretsManagerActive =
+          this.router.url === "/sm" || this.router.url.startsWith("/sm/");
 
         const products = {
           pm: {
@@ -221,19 +221,19 @@ export class ProductSwitcherService {
               external: true,
             },
             isActive:
-              !this.router.url.includes("/sm/") &&
+              !isSecretsManagerActive &&
               !this.router.url.includes("/organizations/") &&
               !this.router.url.includes("/providers/"),
           },
           sm: {
             name: "Secrets Manager",
             icon: "bwi-cli",
-            appRoute: ["/sm", smOrg?.id],
+            appRoute: smOrg?.id ? ["/sm", smOrg.id] : ["/sm"],
             marketingRoute: {
               route: "/sm-landing",
               external: false,
             },
-            isActive: this.router.url.includes("/sm/"),
+            isActive: isSecretsManagerActive,
             otherProductOverrides: {
               supportingText: this.i18nService.t("secureYourInfrastructure"),
             },
@@ -273,13 +273,17 @@ export class ProductSwitcherService {
         } else if (!shouldDisableSMAds) {
           // Only show SM in "other" section if ads are not disabled
           other.push(products.sm);
+        } else {
+          // Vaultwarden: the SM admin panel is always available — show SM in bento
+          // even when no org has canAccessSecretsManager set, so users can reach it.
+          bento.push(products.sm);
         }
 
         if (acOrg) {
           bento.push(products.ac);
         } else {
           if (!userHasSingleOrgPolicy) {
-            other.push(products.orgs);
+            // other.push(products.orgs); no add for Organizations in Vaultwarden
           }
         }
 

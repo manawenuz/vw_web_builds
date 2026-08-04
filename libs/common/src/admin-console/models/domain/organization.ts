@@ -408,6 +408,7 @@ export class Organization {
   }
 
   get canAccessIntegrations() {
+    return false; // disable integrations for Vaultwarden
     return (
       (this.productTierType === ProductTierType.Teams ||
         this.productTierType === ProductTierType.Enterprise) &&
@@ -419,6 +420,6 @@ export class Organization {
   }
 
   get canUseAccessIntelligence() {
-    return this.productTierType === ProductTierType.Enterprise;
+    return false; // no access intelligence in Vaultwarden
   }
 }
